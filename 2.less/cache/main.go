@@ -10,133 +10,194 @@ import (
 type CacheItem struct {
 	key        string
 	value      any
-	expiration int64
+	expiration time.Time
 	element    *list.Element
 }
 
-type LRUCache struct {
-	capacity int
-	items    sync.Map
-	list     *list.List
-	mu       sync.RWMutex
+type Cache struct {
+	capacity    int
+	items       map[string]any
+	list        *list.List
+	mu          *sync.RWMutex
+	stopCleaner chan struct{}
 }
 
-func NewCache(capacity int) *LRUCache {
-	return &LRUCache{
-		capacity: capacity,
-		list:     list.New(),
+type CacheOption func(*Cache)
+
+func WithCapacity(capacity int) CacheOption {
+	return func(c *Cache) {
+		c.capacity = capacity
+		c.list = list.New()
 	}
 }
 
-func (c *LRUCache) Len() {
-	count := 0
-	c.items.Range(
-		func(_, _ interface{}) bool {
-			count++
-			return true
-		},
-	)
-	fmt.Printf("количество элементов в карте: %d\n", count)
-	fmt.Printf("количество элементов в списке: %d\n", c.list.Len())
+func NewCache(options ...CacheOption) *Cache {
+	c := &Cache{items: make(map[string]any), mu: &sync.RWMutex{}}
+	for _, option := range options {
+		option(c)
+	}
+	if c.capacity == 0 { // TTL кеш
+		c.stopCleaner = make(chan struct{})
+		go c.cleanupLoop()
+	}
+	return c
 }
 
-func (c *LRUCache) GetList() {
-	for iterator := c.list.Front(); iterator != nil; iterator = iterator.Next() {
-		fmt.Printf("key: %s, value: %v\n", iterator.Value.(*CacheItem).key, iterator.Value.(*CacheItem).value)
+func (c *Cache) cleanupLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.cleanup()
+		case <-c.stopCleaner:
+			return
+		}
 	}
 }
 
-func (c *LRUCache) getItem(key string) (*CacheItem, bool) {
-	val, ok := c.items.Load(key)
+func (c *Cache) cleanup() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	for key, val := range c.items {
+		item := val.(*CacheItem)
+		if now.After(item.expiration) {
+			delete(c.items, key)
+		}
+	}
+}
+
+func (c *Cache) Close() {
+	if c.stopCleaner != nil {
+		close(c.stopCleaner)
+	}
+}
+
+func (c *Cache) muLoad(key string) (any, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	val, ok := c.items[key]
 	if !ok {
-		return nil, false
+		return nil, ok
 	}
 
-	item := val.(*CacheItem)
-	if c.timeOver(item) {
-		return nil, false
-	}
+	return val, ok
+}
 
+func (c *Cache) muMoveToFront(item *CacheItem) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.list.MoveToFront(item.element)
-
-	return item, true
 }
 
-func (c *LRUCache) timeOver(item *CacheItem) bool {
-	if item.expiration <= time.Now().Unix() {
+func (c *Cache) Get(key string) (any, bool) {
+	val, ok := c.muLoad(key)
+	if !ok {
+		return nil, ok
+	}
+	item := val.(*CacheItem)
+	if time.Now().After(item.expiration) && !c.isLRU() {
 		c.Delete(item)
+		return nil, false
+	}
+
+	if c.isLRU() {
+		c.muMoveToFront(item)
+	}
+
+	return item.value, ok
+}
+
+func (c *Cache) isLRU() bool {
+	if c.list != nil {
 		return true
 	}
+
 	return false
 }
 
-func (c *LRUCache) Delete(item *CacheItem) {
-	c.items.Delete(item.key)
+func (c *Cache) Set(key string, value any, ttl time.Duration) {
+	expiration := time.Now().Add(ttl)
+	newItem := &CacheItem{key: key, value: value, expiration: expiration}
+
+	if c.isLRU() {
+		if val, ok := c.muLoad(key); ok {
+			item := val.(*CacheItem)
+			c.mu.Lock()
+			item.expiration = expiration
+			item.value = value
+			c.mu.Unlock()
+			return
+		}
+
+		if c.capacity == c.list.Len() {
+			c.mu.RLock()
+			oldElement := c.list.Back()
+			oldItem := oldElement.Value.(*CacheItem)
+			c.mu.RUnlock()
+			if oldItem != nil {
+				c.Delete(oldItem)
+			}
+		}
+		c.mu.Lock()
+		newElement := c.list.PushFront(newItem)
+		newItem.element = newElement
+		c.mu.Unlock()
+	}
+	c.mu.Lock()
+	c.items[key] = newItem
+	c.mu.Unlock()
+}
+
+func (c *Cache) Delete(item *CacheItem) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.list.Remove(item.element)
-}
 
-func (c *LRUCache) Get(key string) any {
-	if item, ok := c.getItem(key); ok {
-		return item.value
+	delete(c.items, item.key)
+	if c.isLRU() {
+		c.list.Remove(item.element)
 	}
-
-	return nil
-}
-
-func (c *LRUCache) Set(key string, value any, ttl time.Duration) {
-	expiration := time.Now().Add(ttl).Unix()
-	//уже существует и время не вышло
-	if val, ok := c.getItem(key); ok {
-		val.value = value
-		val.expiration = expiration
-		return
-	}
-
-	if c.capacity == c.list.Len() {
-		//удалить последний элемент
-		c.mu.RLock()
-		oldElement := c.list.Back()
-		oldItem := oldElement.Value.(*CacheItem)
-		c.mu.RUnlock()
-		if oldItem != nil {
-			c.Delete(oldItem)
-		}
-	}
-
-	item := &CacheItem{
-		key:        key,
-		value:      value,
-		expiration: expiration,
-	}
-
-	c.mu.Lock()
-	element := c.list.PushFront(item)
-	c.mu.Unlock()
-	//добавляем элемент из списка в структуру
-	item.element = element
-	c.items.Store(key, item)
 }
 
 func main() {
-	cache := NewCache(3)
-	cache.Set("key1", "value1", 5*time.Second)
-	cache.Set("key2", "value2", 5*time.Second)
-	cache.Set("key3", "value3", 3*time.Second)
-	cache.Set("key4", "value4", 4*time.Second)
-	cache.Len()
-	cache.GetList()
-	time.Sleep(3 * time.Second)
-	fmt.Println(cache.Get("key1"))
-	fmt.Println(cache.Get("key2"))
-	fmt.Println(cache.Get("key3"))
-	fmt.Println(cache.Get("key4"))
-	cache.Set("key4", "value4", 4*time.Second)
-	fmt.Println(cache.Get("key2"))
-	cache.Len()
-	cache.GetList()
-	fmt.Println(cache.Get("key5"))
+	//LRU кэш
+	lruCache := NewCache(WithCapacity(2))
+
+	lruCache.Set("key1", "value1", 0) // TTL не используется для LRU
+	lruCache.Set("key2", "value2", 0)
+	lruCache.Set("key3", "value3", 3*time.Minute)
+
+	valueLru, okLru := lruCache.Get("key2")
+	if okLru {
+		fmt.Printf("LRU Cache - Key: key2, Value: %v\n", valueLru)
+	}
+
+	lruCache.Set("key4", "value4", 3*time.Minute)
+
+	valueLru2, okLru2 := lruCache.Get("key2")
+	if okLru2 {
+		fmt.Printf("LRU Cache - Key: key2, Value: %v\n", valueLru2)
+	}
+
+	// TTL кеш (без ограничения емкости)
+	ttlCache := NewCache()
+	defer ttlCache.Close()
+
+	ttlCache.Set("key1", "value1", 3*time.Second)
+	ttlCache.Set("key2", "value2", 2*time.Minute)
+
+	value, ok := ttlCache.Get("key1")
+	if ok {
+		fmt.Printf("TTL Cache - Key: key1, Value: %v\n", value)
+	}
+	fmt.Println(ttlCache)
+	//time.Sleep(5 * time.Second)
+	//value2, ok2 := ttlCache.Get("key1")
+	//if ok2 {
+	//	fmt.Printf("TTL Cache - Key: key1, Value: %v\n", value2)
+	//}
+	//fmt.Println(ttlCache)
 }
