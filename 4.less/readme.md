@@ -1,5 +1,6 @@
 ## Вопросы
 1. Горутины. https://go.ptflp.ru/course2/8/8.1.1/
+https://habr.com/ru/companies/mvideo/articles/778248/
 2. Внутреннее устройство горутин. https://habr.com/ru/companies/otus/articles/527748/
 3. Планировщик Go. https://www.youtube.com/watch?v=P2Tzdg8n9hw&t=3154s
 4. Go Runtime и его составляющие. https://go.ptflp.ru/course2/9/9.4.1/ https://runebook.dev/ru/docs/go/runtime/index
