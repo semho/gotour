@@ -2,12 +2,12 @@
 1. Каналы. https://habr.com/ru/articles/490336/
 2. Внутреннее устройство каналов. https://medium.com/@victor_nerd/%D0%BF%D0%BE%D0%B4-%D0%BA%D0%B0%D0%BF%D0%BE%D1%82%D0%BE%D0%BC-golang-%D0%BA%D0%B0%D0%BA-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%D1%8E%D1%82-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D1%8B-%D1%87%D0%B0%D1%81%D1%82%D1%8C-1-e1da9e3e104d https://medium.com/@victor_nerd/golang-channel-internal-part2-b4e37ad9a118
 3. Аксиомы каналов https://dzen.ru/a/ZT37Gzpya2uEvz9L
-4. Мультиплексирование
-5. Конструкция Select
-6. Коммуникация и синхронизация горутин
-7. Пакет sync
-8. Контексты
-9. Работа с контекстами
+4. Мультиплексирование https://katcipis.github.io/blog/mux-channels-go/
+5. Конструкция Select https://habr.com/ru/articles/490336/ https://www.programiz.com/golang/select
+6. Коммуникация и синхронизация горутин  https://www.alldevstack.com/ru/golang/sync.html
+7. Пакет sync https://dzen.ru/a/ZIAmWGI5PUidHodE
+8. Контексты https://habr.com/ru/companies/nixys/articles/461723/ https://blog.ildarkarymov.ru/posts/context-guide/
+9. Работа с контекстами https://stepik.org/lesson/748822/step/1?unit=750663
 
 ## Практика
 ### Concurrently Pipeline
