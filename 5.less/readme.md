@@ -12,6 +12,7 @@
 ## Практика
 ### Concurrently Pipeline
 https://golang-blog.blogspot.com/2019/10/concurrency-patterns-pipelines.html
+https://www.youtube.com/watch?v=8Rn8yOQH62k
 
 Необходимо реализовать функцию для запуска конкуррентного пайплайна, состоящего из стейджей.
 
