@@ -17,8 +17,15 @@ type hchan struct {
    lock mutex              // Мьютекс для защиты всех полей структуры hchan, а также некоторых полей в структурах sudog, заблокированных на этом канале
 }
 ```
-3. Аксиомы каналов https://dzen.ru/a/ZT37Gzpya2uEvz9L
-4. Мультиплексирование https://katcipis.github.io/blog/mux-channels-go/   
+3. Аксиомы каналов https://dzen.ru/a/ZT37Gzpya2uEvz9L    
+```
+| Операция       | nil channel | closed channel |
+| -------------- | ----------- | -------------- |
+| close(c)       | panic       | panic          |
+| read val: <- c | block       | default value  |
+| write c <- val | block       | panic          |
+```
+5. Мультиплексирование https://katcipis.github.io/blog/mux-channels-go/   
 это процесс объединения нескольких каналов в один   
 ```
 func multiplex(inputs ...<-chan int) <-chan int {
