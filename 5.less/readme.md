@@ -1,8 +1,55 @@
 ## Вопросы
 1. Каналы. https://habr.com/ru/articles/490336/
-2. Внутреннее устройство каналов. https://medium.com/@victor_nerd/%D0%BF%D0%BE%D0%B4-%D0%BA%D0%B0%D0%BF%D0%BE%D1%82%D0%BE%D0%BC-golang-%D0%BA%D0%B0%D0%BA-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%D1%8E%D1%82-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D1%8B-%D1%87%D0%B0%D1%81%D1%82%D1%8C-1-e1da9e3e104d https://medium.com/@victor_nerd/golang-channel-internal-part2-b4e37ad9a118
-3. Аксиомы каналов https://dzen.ru/a/ZT37Gzpya2uEvz9L
-4. Мультиплексирование https://katcipis.github.io/blog/mux-channels-go/
+2. Внутреннее устройство каналов. https://medium.com/@victor_nerd/%D0%BF%D0%BE%D0%B4-%D0%BA%D0%B0%D0%BF%D0%BE%D1%82%D0%BE%D0%BC-golang-%D0%BA%D0%B0%D0%BA-%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%D1%8E%D1%82-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D1%8B-%D1%87%D0%B0%D1%81%D1%82%D1%8C-1-e1da9e3e104d https://medium.com/@victor_nerd/golang-channel-internal-part2-b4e37ad9a118    
+```
+type hchan struct {
+   qcount   uint           // Общее количество элементов данных в очереди канала в данный момент.
+   dataqsiz uint           // Размер круговой очереди канала(буфер канала). Это максимальное количество элементов, которое может храниться в буфере канала
+   buf      unsafe.Pointer // Указатель на массив, который служит буфером канала. Этот массив содержит dataqsiz элементов.
+   elemsize uint16         // Размер одного элемента данных в байтах
+   closed   uint32         // Флаг, указывающий, закрыт ли канал (1 - закрыт, 0 - открыт)
+   elemtype *_type         // Указатель на информацию о типе элементов, передаваемых через канал
+   sendx    uint           // Индекс в круговом буфере, куда будет записан следующий отправленный элемент
+   recvx    uint           // Индекс в круговом буфере, откуда будет прочитан следующий полученный элемент
+   recvq    waitq          // Список горутин, ожидающих получения данных из канала
+   sendq    waitq          // Список горутин, ожидающих возможности отправить данные в канал
+
+   lock mutex              // Мьютекс для защиты всех полей структуры hchan, а также некоторых полей в структурах sudog, заблокированных на этом канале
+}
+```
+3. Аксиомы каналов https://dzen.ru/a/ZT37Gzpya2uEvz9L    
+```
+| Операция       | nil channel | closed channel |
+| -------------- | ----------- | -------------- |
+| close(c)       | panic       | panic          |
+| read val: <- c | block       | default value  |
+| write c <- val | block       | panic          |
+```
+5. Мультиплексирование https://katcipis.github.io/blog/mux-channels-go/   
+это процесс объединения нескольких каналов в один   
+```
+func multiplex(inputs ...<-chan int) <-chan int {
+    output := make(chan int)
+    var wg sync.WaitGroup
+    wg.Add(len(inputs))
+
+    for _, input := range inputs {
+        go func(ch <-chan int) {
+            defer wg.Done()
+            for value := range ch {
+                output <- value
+            }
+        }(input)
+    }
+
+    go func() {
+        wg.Wait()
+        close(output)
+    }()
+
+    return output
+}
+```
 5. Конструкция Select https://habr.com/ru/articles/490336/ https://www.programiz.com/golang/select
 6. Коммуникация и синхронизация горутин  https://www.alldevstack.com/ru/golang/sync.html
 7. Пакет sync https://dzen.ru/a/ZIAmWGI5PUidHodE
@@ -11,6 +58,8 @@
 
 ## Практика
 ### Concurrently Pipeline
+https://golang-blog.blogspot.com/2019/10/concurrency-patterns-pipelines.html
+https://www.youtube.com/watch?v=8Rn8yOQH62k
 
 Необходимо реализовать функцию для запуска конкуррентного пайплайна, состоящего из стейджей.
 
