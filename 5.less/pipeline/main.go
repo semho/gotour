@@ -32,7 +32,10 @@ func workPipeline(ch In, done In, stage Stage) Out {
 			select {
 			case <-done:
 				return
-			case out <- val:
+			default:
+				select {
+				case out <- val:
+				}
 			}
 		}
 	}()
@@ -59,16 +62,16 @@ func main() {
 	start := time.Now()
 	in := make(Bi)
 	done := make(Bi)
-
+	countCh := 10
 	go func() {
 		defer close(in)
-		for i := 1; i <= 5; i++ {
+		for i := 1; i <= countCh; i++ {
 			in <- i
 		}
 	}()
 
 	result := ExecutePipeline(in, done, WorkStage, WorkStage, WorkStage, WorkStage)
-
+	var results []int
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
@@ -80,11 +83,19 @@ func main() {
 	go func() {
 		defer wg.Done()
 		for val := range result {
-			fmt.Println(val)
+			results = append(results, val.(int))
 		}
 	}()
 
 	wg.Wait()
+
+	if len(results) == countCh {
+		for _, val := range results {
+			fmt.Println(val)
+		}
+	} else {
+		fmt.Println("Пайплайн не выполнен полностью.")
+	}
 
 	duration := time.Since(start)
 	fmt.Printf("Время выполнения пайплайна: %v\n", duration)

@@ -37,24 +37,28 @@ func (wp *WorkerPool) worker() {
 	defer wp.wg.Done()
 	for {
 		select {
-		case task, ok := <-wp.tasksChan:
-			if !ok {
-				return
-			}
-			err := task()
-			wp.mu.Lock()
-			if err != nil {
-				wp.errorCount++
-				if wp.errorCount >= wp.maxCountErrors {
-					wp.Stop()
-					wp.mu.Unlock()
-					return
-				}
-			}
-			wp.tasksCount++
-			wp.mu.Unlock()
 		case <-wp.doneChan:
 			return
+		default:
+			select {
+			case task, ok := <-wp.tasksChan:
+				if !ok {
+					return
+				}
+				err := task()
+				wp.mu.Lock()
+				if err != nil {
+					wp.errorCount++
+					if wp.errorCount >= wp.maxCountErrors {
+						wp.Stop()
+						wp.mu.Unlock()
+						return
+					}
+				}
+				wp.tasksCount++
+				wp.mu.Unlock()
+
+			}
 		}
 	}
 }
@@ -69,9 +73,12 @@ func (wp *WorkerPool) Start(tasks []Task) error {
 		defer close(wp.tasksChan)
 		for _, task := range tasks {
 			select {
-			case wp.tasksChan <- task:
 			case <-wp.doneChan:
 				return
+			default:
+				select {
+				case wp.tasksChan <- task:
+				}
 			}
 		}
 	}()
