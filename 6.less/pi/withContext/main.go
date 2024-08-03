@@ -49,6 +49,7 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for i := 0; i < num; i++ {
 		wg.Add(1)
 		go rowLeibniz(ctx, i, num, intervals, resultCh, &wg)
