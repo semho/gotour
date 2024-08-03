@@ -45,25 +45,27 @@ func main() {
 	resultCh := make(chan float64, num)
 	wg := sync.WaitGroup{}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-		fmt.Println("сигнал для закрытия горутины")
-		cancel()
-		os.Exit(0)
-	}()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < num; i++ {
 		wg.Add(1)
 		go rowLeibniz(ctx, i, num, intervals, resultCh, &wg)
 	}
 
 	go func() {
+		<-sigChan
+		fmt.Println("сигнал для закрытия горутины")
+		cancel()
 		wg.Wait()
 		close(resultCh)
-		fmt.Println("done")
+		os.Exit(0)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
 	}()
 
 	var pi float64
@@ -72,5 +74,6 @@ func main() {
 	}
 	pi *= 4
 
+	fmt.Println("done with context")
 	fmt.Printf("Схождение Pi: %.15f\n", pi)
 }

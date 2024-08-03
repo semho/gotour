@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -10,19 +9,19 @@ import (
 	"syscall"
 )
 
-func rowLeibniz(ctx context.Context, start, step, intervals int, resultCh chan float64, wg *sync.WaitGroup) {
+func rowLeibniz(start, step, intervals int, resultCh chan float64, doneChan chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var partSum float64
 
 	for i := start; i < intervals; i += step {
 		//time.Sleep(1 * time.Second) //для теста syscall.SIGINT
 		select {
-		case <-ctx.Done():
+		case <-doneChan:
 			return
 		default:
 			if i == 0 {
 				partSum = 1 //первый член ряда
-				continue    //переходим к другой итерации, т.к. учтен
+				continue    // переходим к другой итерации, т.к. учтен
 			}
 			den := float64(i)*2 + 1
 			frac := 1 / den
@@ -43,27 +42,29 @@ func main() {
 	flag.Parse()
 
 	resultCh := make(chan float64, num)
+	doneChan := make(chan struct{})
 	wg := sync.WaitGroup{}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-		fmt.Println("сигнал для закрытия горутины")
-		cancel()
-		os.Exit(0)
-	}()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	for i := 0; i < num; i++ {
 		wg.Add(1)
-		go rowLeibniz(ctx, i, num, intervals, resultCh, &wg)
+		go rowLeibniz(i, num, intervals, resultCh, doneChan, &wg)
 	}
+
+	go func() {
+		<-sigChan
+		fmt.Println("сигнал для закрытия горутины")
+		close(doneChan)
+		wg.Wait()
+		close(resultCh)
+		os.Exit(0)
+	}()
 
 	go func() {
 		wg.Wait()
 		close(resultCh)
-		fmt.Println("done")
 	}()
 
 	var pi float64
@@ -72,5 +73,6 @@ func main() {
 	}
 	pi *= 4
 
+	fmt.Println("done with chan")
 	fmt.Printf("Схождение Pi: %.15f\n", pi)
 }
