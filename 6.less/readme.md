@@ -11,6 +11,7 @@
    https://habr.com/ru/articles/771626/
    https://nuancesprog-ru.turbopages.org/turbo/nuancesprog.ru/s/p/12694/
    https://sky.pro/wiki/javascript/graceful-degradation-v-veb-osnovy-primery-i-realizaciya/
+   https://www.youtube.com/watch?v=7bet8rRe_2k
 3. Паттерн Health Check API
    https://medium.com/golang-notes/go-http-health-checker-78ce47a36dfa
    https://habr.com/ru/companies/otus/articles/676342/
