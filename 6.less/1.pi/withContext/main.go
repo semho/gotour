@@ -10,36 +10,28 @@ import (
 	"syscall"
 )
 
-func rowLeibniz(ctx context.Context, start, step, intervals int, resultCh chan float64, wg *sync.WaitGroup) {
+func rowLeibniz(ctx context.Context, start, step int, resultCh chan float64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var partSum float64
-
-	for i := start; i < intervals; i += step {
-		//time.Sleep(1 * time.Second) //для теста syscall.SIGINT
+	for i := start; ; i += step {
 		select {
 		case <-ctx.Done():
+			resultCh <- partSum
 			return
 		default:
-			if i == 0 {
-				partSum = 1 //первый член ряда
-				continue    //переходим к другой итерации, т.к. учтен
-			}
-			den := float64(i)*2 + 1
-			frac := 1 / den
+			frac := 4.0 / float64(2*i+1)
 			if i%2 != 0 {
-				frac = -frac
+				partSum -= frac
+			} else {
+				partSum += frac
 			}
-			partSum += frac
 		}
 	}
-	resultCh <- partSum
 }
 
 func main() {
 	var num int
-	var intervals int
 	flag.IntVar(&num, "n", 1, "количество горутин")
-	flag.IntVar(&intervals, "i", 100, "количество повторений цикла")
 	flag.Parse()
 
 	resultCh := make(chan float64, num)
@@ -50,18 +42,16 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	for i := 0; i < num; i++ {
 		wg.Add(1)
-		go rowLeibniz(ctx, i, num, intervals, resultCh, &wg)
+		go rowLeibniz(ctx, i, num, resultCh, &wg)
 	}
 
 	go func() {
 		<-sigChan
 		fmt.Println("сигнал для закрытия горутины")
 		cancel()
-		wg.Wait()
-		close(resultCh)
-		os.Exit(0)
 	}()
 
 	go func() {
@@ -69,11 +59,10 @@ func main() {
 		close(resultCh)
 	}()
 
-	var pi float64
+	pi := 0.0
 	for partSum := range resultCh {
 		pi += partSum
 	}
-	pi *= 4
 
 	fmt.Println("done with context")
 	fmt.Printf("Схождение Pi: %.15f\n", pi)

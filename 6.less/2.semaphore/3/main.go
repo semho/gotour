@@ -1,4 +1,4 @@
-package main
+package cond_semaphore
 
 import (
 	"context"
@@ -14,88 +14,77 @@ type Semaphore interface {
 	Release(int64)
 }
 
-type condSemaphore struct {
-	capacity  int64
-	available int64
-	mu        *sync.Mutex
-	cond      *sync.Cond
+type CondSemaphore struct {
+	Capacity  int64
+	Available int64
+	Mu        *sync.Mutex
+	Cond      *sync.Cond
 }
 
 func NewCondSemaphore(capacity int64) Semaphore {
 	mu := &sync.Mutex{}
-	s := &condSemaphore{
-		capacity:  capacity,
-		available: capacity,
-		mu:        mu,
-		cond:      sync.NewCond(mu),
+	s := &CondSemaphore{
+		Capacity:  capacity,
+		Available: capacity,
+		Mu:        mu,
+		Cond:      sync.NewCond(mu),
 	}
 
 	return s
 }
 
-func (s *condSemaphore) Acquire(ctx context.Context, n int64) error {
+func (s *CondSemaphore) Acquire(ctx context.Context, n int64) error {
 	if n <= 0 {
 		return fmt.Errorf("n must be positive")
 	}
 
-	for {
-		if s.TryAcquire(n) { //захват ресурсов, если есть
-			return nil
-		}
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
 
-		s.mu.Lock()
-		// если ресурсы недоступны, ждем
-		waitCh := make(chan struct{})
+	for s.Available < n {
+		done := make(chan struct{})
 		go func() {
-			s.mu.Lock()
-			s.cond.Wait()
-			s.mu.Unlock()
-			close(waitCh)
-		}()
-
-		s.mu.Unlock()
-		select {
-		case <-waitCh:
 			select {
 			case <-ctx.Done():
-				s.mu.Lock()
-				s.cond.Signal() // пробуждение горутины, ожидающей на cond.Wait()
-				s.mu.Unlock()
-				return ctx.Err()
-			default:
-				return nil //все ок, канал закрыт, будет захват
+				s.Cond.Broadcast() // разбудим ожидающих, чтобы они могли проверить контекст
+			case <-done:
 			}
-		case <-ctx.Done():
-			s.mu.Lock()
-			s.cond.Signal()
-			s.mu.Unlock()
+		}()
+
+		s.Cond.Wait()
+		close(done)
+
+		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 	}
+
+	s.Available -= n
+	return nil
 }
 
-func (s *condSemaphore) TryAcquire(n int64) bool {
+func (s *CondSemaphore) TryAcquire(n int64) bool {
 	if n <= 0 {
 		return false
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.available >= n {
-		s.available -= n
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if s.Available >= n {
+		s.Available -= n
 		return true
 	}
 	return false
 }
 
-func (s *condSemaphore) Release(n int64) {
+func (s *CondSemaphore) Release(n int64) {
 	if n <= 0 {
 		return
 	}
 
-	s.mu.Lock()
-	s.available = min(s.available+n, s.capacity)
-	s.mu.Unlock()
-	s.cond.Broadcast()
+	s.Mu.Lock()
+	s.Available = min(s.Available+n, s.Capacity)
+	s.Mu.Unlock()
+	s.Cond.Broadcast()
 }
 
 func main() {

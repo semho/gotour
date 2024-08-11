@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"golang.org/x/sync/semaphore"
 	"log"
+	condSemaphore "mysemaphore/3"
 	"sync"
 	"time"
 )
@@ -20,12 +22,28 @@ type bufferSemaphore struct {
 	mu       *sync.Mutex
 }
 
-func NewSemaphore(capacity int64) Semaphore {
+func NewBufferSemaphore(capacity int64) Semaphore {
 	return &bufferSemaphore{
 		capacity: capacity,
 		tokens:   make(chan struct{}, capacity),
 		mu:       &sync.Mutex{},
 	}
+}
+
+func NewGoSemaphore(capacity int64) Semaphore {
+	return semaphore.NewWeighted(capacity)
+}
+
+func NewCondSemaphore(capacity int64) Semaphore {
+	mu := &sync.Mutex{}
+	s := &condSemaphore.CondSemaphore{
+		Capacity:  capacity,
+		Available: capacity,
+		Mu:        mu,
+		Cond:      sync.NewCond(mu),
+	}
+
+	return s
 }
 
 func (s *bufferSemaphore) Acquire(ctx context.Context, n int64) error {
@@ -35,6 +53,10 @@ func (s *bufferSemaphore) Acquire(ctx context.Context, n int64) error {
 
 	for {
 		if s.TryAcquire(n) {
+			for i := int64(0); i < n; i++ {
+				s.tokens <- struct{}{}
+			}
+
 			return nil
 		}
 
@@ -58,16 +80,6 @@ func (s *bufferSemaphore) TryAcquire(n int64) bool {
 		return false
 	}
 
-	for i := int64(0); i < n; i++ {
-		select {
-		case s.tokens <- struct{}{}:
-		default:
-			for ; i > 0; i-- {
-				<-s.tokens
-			}
-			return false
-		}
-	}
 	return true
 }
 
@@ -86,7 +98,9 @@ func main() {
 	results := []int{10, 15, 8, 3, 17, 20, 1, 6, 10, 9, 13, 19}
 
 	var wg sync.WaitGroup
-	sem := NewSemaphore(6)
+	//sem := NewBufferSemaphore(6)
+	//sem := NewGoSemaphore(6)
+	sem := NewCondSemaphore(6)
 	var responses []int
 	mu := &sync.Mutex{}
 
