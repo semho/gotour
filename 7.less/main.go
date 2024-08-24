@@ -196,7 +196,7 @@ func processInputFiles(ctx context.Context, filePaths []string) ([]<-chan int, e
 	span := sentry.StartSpan(ctx, "process_input_files")
 	defer span.Finish()
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, ctxGrErr := errgroup.WithContext(context.Background())
 	channels := make([]<-chan int, len(filePaths))
 
 	for i, filePath := range filePaths {
@@ -206,15 +206,31 @@ func processInputFiles(ctx context.Context, filePaths []string) ([]<-chan int, e
 				fileSpan.SetTag("file", filePath)
 				defer fileSpan.Finish()
 
-				file, err := os.Open(filePath)
-				if err != nil {
-					log.Errorf("Ошибка открытия файла %s: %v", filePath, err)
-					sentry.CaptureException(err)
-					return fmt.Errorf("ошибка открытия файла %s: %w", filePath, err)
+				//TODO: без задержки не увидим сообщение о закрытии контекста в errgroup
+				time.Sleep(10 * time.Millisecond)
+
+				select {
+				case <-ctxGrErr.Done():
+					log.Warnf("Закрытие по контексту в errgroup %s: %v", filePath, ctxGrErr.Err())
+					sentry.CaptureMessage(
+						fmt.Sprintf(
+							"Закрытие по контексту в errgroup %s: %v",
+							filePath,
+							ctxGrErr.Err(),
+						),
+					)
+					return ctxGrErr.Err()
+				default:
+					file, err := os.Open(filePath)
+					if err != nil {
+						log.Errorf("Ошибка открытия файла %s: %v", filePath, err)
+						sentry.CaptureException(err)
+						return fmt.Errorf("ошибка открытия файла %s: %w", filePath, err)
+					}
+					atomic.AddInt64(&openInputFiles, 1)
+					channels[i] = readNumbers(fileSpan.Context(), file)
+					return nil
 				}
-				atomic.AddInt64(&openInputFiles, 1)
-				channels[i] = readNumbers(fileSpan.Context(), file)
-				return nil
 			},
 		)
 	}
