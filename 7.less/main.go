@@ -208,18 +208,14 @@ func handleMessages(ctx context.Context, msgChan <-chan Message, resultChan <-ch
 		case <-resultChan:
 			return
 		case <-ctx.Done():
-			select {
-			case msg := <-msgChan:
-				handleMessage(msg)
-			case <-time.After(1000 * time.Millisecond):
-				handleMessage(
-					Message{
-						Type:    MessageTypeContext,
-						Content: fmt.Sprintf("Контекст отменен в processFiles: %v", ctx.Err()),
-					},
-				)
+			for { //читаем все сообщения контекста
+				select {
+				case msg := <-msgChan:
+					handleMessage(msg)
+				case <-time.After(1000 * time.Millisecond):
+					return
+				}
 			}
-			return
 		}
 	}
 }
@@ -374,10 +370,14 @@ func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-
 
 		for activeInputs > 0 {
 			select {
-			case <-span.Context().Done():
+			case <-ctx.Done():
 				// Контекст был отменен, завершаем работу
-				log.Warnf("Слияние прервано из-за отмены контекста %v", span.Context().Err())
-				sentry.CaptureMessage("Слияние прервано из-за отмены контекста")
+				msgChan <- Message{
+					Type: MessageTypeContext,
+					Content: fmt.Sprintf(
+						"Слияние прервано из-за отмены контекста %v", span.Context().Err(),
+					),
+				}
 				return
 			default:
 				minVal := math.MaxInt // максимальное значение int
@@ -392,10 +392,14 @@ func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-
 
 				// Отправляем минимальное значение в выходной канал
 				select {
-				case <-span.Context().Done():
+				case <-ctx.Done():
 					// Контекст был отменен во время отправки
-					log.Warnf("Слияние прервано из-за отмены контекста при отправке значения %v", span.Context().Err())
-					sentry.CaptureMessage("Слияние прервано из-за отмены контекста при отправке значения")
+					msgChan <- Message{
+						Type: MessageTypeContext,
+						Content: fmt.Sprintf(
+							"Слияние прервано из-за отмены контекста при отправке значения %v", span.Context().Err(),
+						),
+					}
 					return
 				default:
 					select {
@@ -425,7 +429,6 @@ func readFromChannel(ctx context.Context, ch <-chan int, activeCount int) (int, 
 	}
 	select {
 	case <-ctx.Done():
-		log.Warnf("Слияние прервано из-за отмены контекста при отправке значения %v", span.Context().Err())
 		return marker()
 	default:
 		select {
