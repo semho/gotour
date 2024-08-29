@@ -41,6 +41,21 @@ var (
 	log *logrus.Logger
 )
 
+type Message struct {
+	Type    MessageType
+	Content string
+}
+
+type MessageType int
+
+const (
+	MessageTypeError MessageType = iota
+	MessageTypeInfo
+	MessageTypeWarn
+	MessageTypeDebug
+	MessageTypeContext
+)
+
 func init() {
 	var err error
 	otherFile, err = os.Create("other")
@@ -106,10 +121,7 @@ func main() {
 	transaction := sentry.StartTransaction(ctx, "process_files")
 	defer transaction.Finish()
 
-	if err = processFiles(transaction.Context(), inputFiles, outputFile); err != nil {
-		log.Errorf("Ошибка обработки файлов: %v", err)
-		sentry.CaptureException(err)
-	}
+	processFiles(transaction.Context(), inputFiles, outputFile)
 
 	metricsCancel()
 	wg.Wait()
@@ -155,30 +167,80 @@ func printFinalCounters() {
 	log.Infof("Открытых входных файлов: %d", atomic.LoadInt64(&openInputFiles))
 }
 
-func processFiles(ctx context.Context, inputFiles []string, outputFile string) error {
+func processFiles(ctx context.Context, inputFiles []string, outputFile string) {
 	log.Info("Начало обработки файлов")
 	span := sentry.StartSpan(ctx, "process_files")
 	defer span.Finish()
 
-	errChan := make(chan error, 1)
-	var err error
+	messageChan := make(chan Message, 100)
+	resultChan := make(chan struct{})
 
-	channels := processInputFiles(span.Context(), inputFiles, errChan)
-	select {
-	case err = <-errChan:
-		return err
-	default:
+	go func() {
+		defer close(resultChan)
+		channels := processInputFiles(ctx, inputFiles, messageChan)
+		if channels == nil {
+			return // выходим после первой ошибки, для предотвращения чтения из других файлов
+		}
+		mergedChannel := merge(ctx, messageChan, channels...)
+		err := saveResult(ctx, outputFile, mergedChannel)
+		if err != nil {
+			select {
+			case messageChan <- Message{Type: MessageTypeError, Content: err.Error()}:
+			default:
+			}
+		}
+	}()
+
+	handleMessages(span.Context(), messageChan, resultChan)
+}
+
+func handleMessages(ctx context.Context, msgChan <-chan Message, resultChan <-chan struct{}) {
+	span := sentry.StartSpan(ctx, "handle_messages")
+	defer span.Finish()
+
+	for {
+		select {
+		case msg := <-msgChan:
+			handleMessage(msg)
+			if msg.Type == MessageTypeError {
+				return // выходим после обработки критической ошибки
+			}
+		case <-resultChan:
+			return
+		case <-ctx.Done():
+			select {
+			case msg := <-msgChan:
+				handleMessage(msg)
+			case <-time.After(1000 * time.Millisecond):
+				handleMessage(
+					Message{
+						Type:    MessageTypeContext,
+						Content: fmt.Sprintf("Контекст отменен в processFiles: %v", ctx.Err()),
+					},
+				)
+			}
+			return
+		}
 	}
+}
 
-	mergeSpan := sentry.StartSpan(span.Context(), "merge_channels")
-	mergedChannel := merge(mergeSpan.Context(), channels...)
-	mergeSpan.Finish()
-
-	saveSpan := sentry.StartSpan(span.Context(), "save_result")
-	err = saveResult(saveSpan.Context(), outputFile, mergedChannel)
-	saveSpan.Finish()
-
-	return err
+func handleMessage(msg Message) {
+	switch msg.Type {
+	case MessageTypeError:
+		log.Errorf("Ошибка обработки файлов: %v", msg.Content)
+		sentry.CaptureException(fmt.Errorf(msg.Content))
+	case MessageTypeDebug:
+		log.Debug(msg.Content)
+		sentry.CaptureMessage(msg.Content)
+	case MessageTypeWarn:
+		log.Warn(msg.Content)
+		sentry.CaptureMessage(msg.Content)
+	case MessageTypeInfo:
+		log.Info(msg.Content)
+	case MessageTypeContext:
+		log.Warn(msg.Content)
+		sentry.CaptureMessage(msg.Content)
+	}
 }
 
 func closeFile(file *os.File) {
@@ -193,66 +255,38 @@ func closeInputFile(file *os.File) {
 	closeFile(file)
 }
 
-func processInputFiles(ctx context.Context, filePaths []string, errChan chan<- error) []<-chan int {
-	done := make(chan struct{})
-	var once sync.Once
-	closeDone := func() {
-		once.Do(
-			func() {
-				close(done)
-			},
-		)
-	}
-	defer closeDone()
-
+func processInputFiles(
+	ctx context.Context,
+	filePaths []string,
+	msgChan chan<- Message,
+) []<-chan int {
 	span := sentry.StartSpan(ctx, "process_input_files")
 	defer span.Finish()
 
-	channels := make([]<-chan int, len(filePaths))
+	channels := make([]<-chan int, 0, len(filePaths))
 
-	wg := &sync.WaitGroup{}
-
-	for i, filePath := range filePaths {
-		wg.Add(1)
-		go func(i int, filePath string) {
-			defer wg.Done()
-			fileSpan := sentry.StartSpan(span.Context(), "process_file")
-			fileSpan.SetTag("file", filePath)
-			defer fileSpan.Finish()
-
-			//TODO: без задержки не увидим сообщение о закрытии контекста
-			time.Sleep(10 * time.Millisecond)
-			select {
-			case <-ctx.Done():
-				sentry.CaptureMessage(
-					fmt.Sprintf(
-						"Закрытие по контексту в processInputFiles %s: %v",
-						filePath,
-						ctx.Err(),
-					),
-				)
-				return
-			case <-done: //нужно для завершения работы, если есть ошибка
-				return
-			default:
-				file, err := os.Open(filePath)
-				if err != nil {
-					sentry.CaptureException(err)
-					errChan <- fmt.Errorf("В processInputFiles  ошибка открытия файла %s: %w", filePath, err)
-					closeDone()
-					return
+	for _, filePath := range filePaths {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			file, err := os.Open(filePath)
+			if err != nil {
+				msgChan <- Message{
+					Type:    MessageTypeError,
+					Content: fmt.Sprintf("В processInputFiles ошибка открытия файла %s: %v", filePath, err),
 				}
-				atomic.AddInt64(&openInputFiles, 1)
-				channels[i] = readNumbers(fileSpan.Context(), file, errChan)
+				return nil
 			}
-		}(i, filePath)
+			atomic.AddInt64(&openInputFiles, 1)
+			channels = append(channels, readNumbers(span.Context(), file, msgChan))
+		}
 	}
-	wg.Wait()
 
 	return channels
 }
 
-func readNumbers(ctx context.Context, file *os.File, errChan chan<- error) <-chan int {
+func readNumbers(ctx context.Context, file *os.File, msgChan chan<- Message) <-chan int {
 	span := sentry.StartSpan(ctx, "read_numbers")
 	defer span.Finish()
 
@@ -265,14 +299,14 @@ func readNumbers(ctx context.Context, file *os.File, errChan chan<- error) <-cha
 		for scanner.Scan() {
 			time.Sleep(time.Second) //TODO: задержка для просмотра прогресса в терминале
 			if ctx.Err() != nil {
-				log.Warnf("Контекст отменен в readNumbers для файла %s: %v", file.Name(), ctx.Err())
-				sentry.CaptureMessage(
-					fmt.Sprintf(
-						"Контекст отменен в readNumbers для файла %s: %v",
+				msgChan <- Message{
+					Type: MessageTypeContext,
+					Content: fmt.Sprintf(
+						"Контекст отменен в readNumbers при чтении файла %s: %v",
 						file.Name(),
 						ctx.Err(),
 					),
-				)
+				}
 				updateProcessedLines(file.Name(), linesProcessed)
 				return
 			}
@@ -283,18 +317,17 @@ func readNumbers(ctx context.Context, file *os.File, errChan chan<- error) <-cha
 			} else {
 				otherValues(scanner.Text())
 				atomic.AddInt64(&errorLines, 1)
-				log.Infof("Пропущена некорректная строка в файле %s: %s", file.Name(), scanner.Text())
-				sentry.CaptureMessage(
-					fmt.Sprintf(
-						"Пропущена некорректная строка в файле %s: %s",
-						file.Name(),
-						scanner.Text(),
-					),
-				)
+				msgChan <- Message{
+					Type:    MessageTypeInfo,
+					Content: fmt.Sprintf("Пропущена некорректная строка в файле %s: %s", file.Name(), scanner.Text()),
+				}
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			errChan <- fmt.Errorf("ошибка чтения файла %s: %v", file.Name(), err)
+			msgChan <- Message{
+				Type:    MessageTypeError,
+				Content: fmt.Sprintf("ошибка чтения файла %s: %v", file.Name(), err),
+			}
 		}
 		updateProcessedLines(file.Name(), linesProcessed)
 	}()
@@ -322,8 +355,8 @@ func otherValues(val string) {
 	}
 }
 
-func merge(ctx context.Context, inputs ...<-chan int) <-chan int {
-	span := sentry.StartSpan(ctx, "merge")
+func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-chan int {
+	span := sentry.StartSpan(ctx, "merge_channels")
 	defer span.Finish()
 
 	output := make(chan int)
