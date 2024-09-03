@@ -1,6 +1,7 @@
 package main
 
 import (
+	"7less/pkg"
 	"bufio"
 	"context"
 	"flag"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -31,29 +31,7 @@ func (i *arrayFlags) Set(value string) error {
 
 var (
 	otherFile *os.File
-	mu        sync.Mutex
-
-	processedLines      map[string]int64
-	errorLines          int64
-	openInputFiles      int64
-	totalProcessedLines int64
-
-	log *logrus.Logger
-)
-
-type Message struct {
-	Type    MessageType
-	Content string
-}
-
-type MessageType int
-
-const (
-	MessageTypeError MessageType = iota
-	MessageTypeInfo
-	MessageTypeWarn
-	MessageTypeDebug
-	MessageTypeContext
+	log       *logrus.Logger
 )
 
 func init() {
@@ -62,7 +40,6 @@ func init() {
 	if err != nil {
 		log.Fatal("Ошибка открытия файла 'other':", err)
 	}
-	processedLines = make(map[string]int64)
 
 	// Инит logrus
 	log = logrus.New()
@@ -89,7 +66,7 @@ func init() {
 }
 
 func main() {
-	defer closeFile(otherFile)
+	defer pkg.CloseFile(otherFile, log)
 	defer sentry.Flush(2 * time.Second)
 
 	var inputFiles arrayFlags
@@ -100,12 +77,7 @@ func main() {
 	flag.StringVar(&logLevel, "log-level", "info", "уровень логирования (debug, info, warn, error)")
 	flag.Parse()
 
-	level, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		log.Warnf("Неверный уровень логирования: %s. Используется уровень по умолчанию (info)", logLevel)
-	} else {
-		log.SetLevel(level)
-	}
+	setLogLevel(logLevel)
 
 	log.Info("Запуск программы")
 
@@ -130,6 +102,15 @@ func main() {
 	log.Info("Программа завершена")
 }
 
+func setLogLevel(logLevel string) {
+	level, err := logrus.ParseLevel(logLevel)
+	if err != nil {
+		log.Warnf("Неверный уровень логирования: %s. Используется уровень по умолчанию (info)", logLevel)
+	} else {
+		log.SetLevel(level)
+	}
+}
+
 func reportMetrics(ctx context.Context, wg *sync.WaitGroup) {
 	ticker := time.NewTicker(1 * time.Second) //как часто смотрим метрики
 	defer ticker.Stop()
@@ -149,22 +130,11 @@ func reportMetrics(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func printMetrics() {
-	log.Infof(
-		"Метрики: Обработано строк: %d, Строк с ошибками: %d, Открыто входных файлов: %d",
-		atomic.LoadInt64(&totalProcessedLines), atomic.LoadInt64(&errorLines), atomic.LoadInt64(&openInputFiles),
-	)
+	pkg.PrintMetrics(log, pkg.GetOpenInputFilesCount())
 }
 
 func printFinalCounters() {
-	log.Info("Финальные счетчики:")
-	mu.Lock()
-	for file, count := range processedLines {
-		log.Infof("Файл %s: обработано строк %d", file, count)
-	}
-	mu.Unlock()
-	log.Infof("Всего обработано строк: %d", atomic.LoadInt64(&totalProcessedLines))
-	log.Infof("Всего строк с ошибками: %d", atomic.LoadInt64(&errorLines))
-	log.Infof("Открытых входных файлов: %d", atomic.LoadInt64(&openInputFiles))
+	pkg.PrintFinalCounters(log, pkg.GetOpenInputFilesCount())
 }
 
 func processFiles(ctx context.Context, inputFiles []string, outputFile string) {
@@ -172,7 +142,7 @@ func processFiles(ctx context.Context, inputFiles []string, outputFile string) {
 	span := sentry.StartSpan(ctx, "process_files")
 	defer span.Finish()
 
-	messageChan := make(chan Message, 100)
+	messageChan := make(chan pkg.Message, 100)
 	resultChan := make(chan struct{})
 
 	go func() {
@@ -182,79 +152,16 @@ func processFiles(ctx context.Context, inputFiles []string, outputFile string) {
 			return // выходим после первой ошибки, для предотвращения чтения из других файлов
 		}
 		mergedChannel := merge(ctx, messageChan, channels...)
-		err := saveResult(ctx, outputFile, mergedChannel)
-		if err != nil {
-			select {
-			case messageChan <- Message{Type: MessageTypeError, Content: err.Error()}:
-			default:
-			}
-		}
+		saveResult(ctx, outputFile, mergedChannel, messageChan)
 	}()
 
-	handleMessages(span.Context(), messageChan, resultChan)
-}
-
-func handleMessages(ctx context.Context, msgChan <-chan Message, resultChan <-chan struct{}) {
-	span := sentry.StartSpan(ctx, "handle_messages")
-	defer span.Finish()
-
-	for {
-		select {
-		case msg := <-msgChan:
-			handleMessage(msg)
-			if msg.Type == MessageTypeError {
-				return // выходим после обработки критической ошибки
-			}
-		case <-resultChan:
-			return
-		case <-ctx.Done():
-			for { //читаем все сообщения контекста
-				select {
-				case msg := <-msgChan:
-					handleMessage(msg)
-				case <-time.After(1000 * time.Millisecond):
-					return
-				}
-			}
-		}
-	}
-}
-
-func handleMessage(msg Message) {
-	switch msg.Type {
-	case MessageTypeError:
-		log.Errorf("Ошибка обработки файлов: %v", msg.Content)
-		sentry.CaptureException(fmt.Errorf(msg.Content))
-	case MessageTypeDebug:
-		log.Debug(msg.Content)
-		sentry.CaptureMessage(msg.Content)
-	case MessageTypeWarn:
-		log.Warn(msg.Content)
-		sentry.CaptureMessage(msg.Content)
-	case MessageTypeInfo:
-		log.Info(msg.Content)
-	case MessageTypeContext:
-		log.Warn(msg.Content)
-		sentry.CaptureMessage(msg.Content)
-	}
-}
-
-func closeFile(file *os.File) {
-	err := file.Close()
-	if err != nil {
-		log.Errorf("Ошибка при закрытии файла %s: %v", file.Name(), err)
-	}
-}
-
-func closeInputFile(file *os.File) {
-	atomic.AddInt64(&openInputFiles, -1) //для подсчета открытых файлов
-	closeFile(file)
+	pkg.HandleMessages(span.Context(), messageChan, resultChan, log)
 }
 
 func processInputFiles(
 	ctx context.Context,
 	filePaths []string,
-	msgChan chan<- Message,
+	msgChan chan<- pkg.Message,
 ) []<-chan int {
 	span := sentry.StartSpan(ctx, "process_input_files")
 	defer span.Finish()
@@ -266,15 +173,14 @@ func processInputFiles(
 		case <-ctx.Done():
 			return nil
 		default:
-			file, err := os.Open(filePath)
+			file, err := pkg.OpenInputFile(filePath)
 			if err != nil {
-				msgChan <- Message{
-					Type:    MessageTypeError,
+				msgChan <- pkg.Message{
+					Type:    pkg.MessageTypeError,
 					Content: fmt.Sprintf("В processInputFiles ошибка открытия файла %s: %v", filePath, err),
 				}
 				return nil
 			}
-			atomic.AddInt64(&openInputFiles, 1)
 			channels = append(channels, readNumbers(span.Context(), file, msgChan))
 		}
 	}
@@ -282,21 +188,21 @@ func processInputFiles(
 	return channels
 }
 
-func readNumbers(ctx context.Context, file *os.File, msgChan chan<- Message) <-chan int {
+func readNumbers(ctx context.Context, file *os.File, msgChan chan<- pkg.Message) <-chan int {
 	span := sentry.StartSpan(ctx, "read_numbers")
 	defer span.Finish()
 
 	out := make(chan int)
 	go func() {
 		defer close(out)
-		defer closeInputFile(file)
+		defer pkg.CloseInputFile(file, log)
 		scanner := bufio.NewScanner(file)
 		var linesProcessed int64
 		for scanner.Scan() {
 			time.Sleep(time.Second) //TODO: задержка для просмотра прогресса в терминале
 			if ctx.Err() != nil {
-				msgChan <- Message{
-					Type: MessageTypeContext,
+				msgChan <- pkg.Message{
+					Type: pkg.MessageTypeContext,
 					Content: fmt.Sprintf(
 						"Контекст отменен в readNumbers при чтении файла %s: %v",
 						file.Name(),
@@ -306,22 +212,22 @@ func readNumbers(ctx context.Context, file *os.File, msgChan chan<- Message) <-c
 				updateProcessedLines(file.Name(), linesProcessed)
 				return
 			}
-			atomic.AddInt64(&totalProcessedLines, 1)
+			pkg.IncrementTotalProcessedLines()
 			if num, err := strconv.Atoi(scanner.Text()); err == nil {
 				out <- num
 				linesProcessed++
 			} else {
 				otherValues(scanner.Text())
-				atomic.AddInt64(&errorLines, 1)
-				msgChan <- Message{
-					Type:    MessageTypeInfo,
+				pkg.IncrementErrorLines()
+				msgChan <- pkg.Message{
+					Type:    pkg.MessageTypeInfo,
 					Content: fmt.Sprintf("Пропущена некорректная строка в файле %s: %s", file.Name(), scanner.Text()),
 				}
 			}
 		}
 		if err := scanner.Err(); err != nil {
-			msgChan <- Message{
-				Type:    MessageTypeError,
+			msgChan <- pkg.Message{
+				Type:    pkg.MessageTypeError,
 				Content: fmt.Sprintf("ошибка чтения файла %s: %v", file.Name(), err),
 			}
 		}
@@ -331,27 +237,17 @@ func readNumbers(ctx context.Context, file *os.File, msgChan chan<- Message) <-c
 }
 
 func updateProcessedLines(file string, count int64) {
-	mu.Lock()
-	processedLines[file] += count
-	mu.Unlock()
+	pkg.UpdateProcessedLines(file, count)
 }
 
 func otherValues(val string) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	writer := bufio.NewWriter(otherFile)
-	_, err := writer.WriteString(fmt.Sprintf("%s\n", val))
+	err := pkg.WriteToFile(otherFile, val)
 	if err != nil {
 		log.Errorf("Ошибка записи в other файл: %v", err)
 	}
-	err = writer.Flush()
-	if err != nil {
-		log.Errorf("Ошибка сбрасывания данных из буфера в other файл: %v", err)
-	}
 }
 
-func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-chan int {
+func merge(ctx context.Context, msgChan chan<- pkg.Message, inputs ...<-chan int) <-chan int {
 	span := sentry.StartSpan(ctx, "merge_channels")
 	defer span.Finish()
 
@@ -372,8 +268,8 @@ func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-
 			select {
 			case <-ctx.Done():
 				// Контекст был отменен, завершаем работу
-				msgChan <- Message{
-					Type: MessageTypeContext,
+				msgChan <- pkg.Message{
+					Type: pkg.MessageTypeContext,
 					Content: fmt.Sprintf(
 						"Слияние прервано из-за отмены контекста %v", span.Context().Err(),
 					),
@@ -394,8 +290,8 @@ func merge(ctx context.Context, msgChan chan<- Message, inputs ...<-chan int) <-
 				select {
 				case <-ctx.Done():
 					// Контекст был отменен во время отправки
-					msgChan <- Message{
-						Type: MessageTypeContext,
+					msgChan <- pkg.Message{
+						Type: pkg.MessageTypeContext,
 						Content: fmt.Sprintf(
 							"Слияние прервано из-за отмены контекста при отправке значения %v", span.Context().Err(),
 						),
@@ -441,45 +337,47 @@ func readFromChannel(ctx context.Context, ch <-chan int, activeCount int) (int, 
 	}
 }
 
-func saveResult(ctx context.Context, outputFile string, mergedChannel <-chan int) error {
+func saveResult(ctx context.Context, outputFile string, mergedChannel <-chan int, msgChan chan<- pkg.Message) {
 	span := sentry.StartSpan(ctx, "save_result")
 	defer span.Finish()
 
 	outFile, err := os.Create(outputFile)
 	if err != nil {
-		log.Errorf("Ошибка создания выходного файла: %v", err)
-		sentry.CaptureException(err)
-		return fmt.Errorf("ошибка создания выходного файла: %w", err)
+		msgChan <- pkg.Message{
+			Type:    pkg.MessageTypeError,
+			Content: fmt.Sprint("ошибка создания выходного файла"),
+		}
+		return
 	}
 
-	defer closeFile(outFile)
-
-	writer := bufio.NewWriter(outFile)
+	defer pkg.CloseFile(outFile, log)
 
 	for {
 		select {
 		case <-span.Context().Done():
-			log.Warn("Получен сигнал завершения. Сохранение промежуточных результатов...")
-			sentry.CaptureMessage("Сохранение результатов прервано из-за отмены контекста")
-			return nil
+			msgChan <- pkg.Message{
+				Type: pkg.MessageTypeContext,
+				Content: fmt.Sprintf(
+					"Сохранение результатов прервано из-за отмены контекста %v", span.Context().Err(),
+				),
+			}
+			return
 		default:
 			select {
 			case num, ok := <-mergedChannel:
 				if !ok {
-					log.Info("Завершение записи результатов")
-					return writer.Flush()
+					msgChan <- pkg.Message{
+						Type:    pkg.MessageTypeInfo,
+						Content: fmt.Sprint("Завершение записи результатов"),
+					}
+					return
 				}
-				_, err = writer.WriteString(fmt.Sprintf("%d\n", num))
-				if err != nil {
-					log.Errorf("Ошибка записи в файл: %v", err)
-					sentry.CaptureException(err)
-					return fmt.Errorf("ошибка записи в файл: %w", err)
-				}
-				err = writer.Flush()
-				if err != nil {
-					log.Errorf("Ошибка сбрасывания данных из буфера в выходной файл: %v", err)
-					sentry.CaptureException(err)
-					return fmt.Errorf("ошибка сбрасывания данных из буфера в выходной файл: %w", err)
+				if err = pkg.WriteToFile(outFile, fmt.Sprintf("%d", num)); err != nil {
+					msgChan <- pkg.Message{
+						Type:    pkg.MessageTypeError,
+						Content: fmt.Sprintf("ошибка записи в файл: %v", err),
+					}
+					return
 				}
 			}
 		}
