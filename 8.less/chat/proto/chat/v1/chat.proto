@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package chat_v1;
+
+option go_package = "chat/pkg/chat_v1;chat_v1";
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service ChatService {
+  rpc CreateSession(CreateSessionRequest) returns (Session) {
+    option (google.api.http) = {
+      post: "/v1/session"
+      body: "*"
+    };
+  }
+  rpc CreateChat(CreateChatRequest) returns (Chat) {
+    option (google.api.http) = {
+      post: "/v1/chat"
+      body: "*"
+    };
+  }
+  rpc DeleteChat(DeleteChatRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/v1/chat/{chat_id}"
+    };
+  }
+  rpc SetChatTTL(SetChatTTLRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      put: "/v1/chat/{chat_id}/ttl"
+      body: "*"
+    };
+  }
+  rpc SendMessage(SendMessageRequest) returns (Message) {
+    option (google.api.http) = {
+      post: "/v1/chat/{chat_id}/message"
+      body: "*"
+    };
+  }
+  rpc GetChatHistory(GetChatHistoryRequest) returns (ChatHistory) {
+    option (google.api.http) = {
+      get: "/v1/chat/{chat_id}/history"
+    };
+  }
+  rpc RequestChatAccess(RequestChatAccessRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/v1/chat/{chat_id}/access"
+      body: "*"
+    };
+  }
+  rpc GetAccessRequests(GetAccessRequestsRequest) returns (AccessRequestList) {
+    option (google.api.http) = {
+      get: "/v1/chat/{chat_id}/access"
+    };
+  }
+  rpc GrantChatAccess(GrantChatAccessRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      put: "/v1/chat/{chat_id}/access"
+      body: "*"
+    };
+  }
+}
+
+message Session {
+  string id = 1;
+  string nickname = 2;
+}
+
+message CreateSessionRequest {
+  string nickname = 1;
+}
+
+message Chat {
+  string id = 1;
+  int32 history_size = 2;
+  google.protobuf.Timestamp ttl = 3;
+  bool read_only = 4;
+  bool private = 5;
+  string owner_id = 6;
+}
+
+message CreateChatRequest {
+  int32 history_size = 1;
+  int64 ttl_seconds = 2;
+  bool read_only = 3;
+  bool private = 4;
+}
+
+message DeleteChatRequest {
+  string chat_id = 1;
+}
+
+message SetChatTTLRequest {
+  string chat_id = 1;
+  int64 ttl_seconds = 2;
+}
+
+message Message {
+  string id = 1;
+  string chat_id = 2;
+  string session_id = 3;
+  string text = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message SendMessageRequest {
+  string chat_id = 1;
+  string text = 2;
+}
+
+message GetChatHistoryRequest {
+  string chat_id = 1;
+}
+
+message ChatHistory {
+  repeated Message messages = 1;
+}
+
+message RequestChatAccessRequest {
+  string chat_id = 1;
+}
+
+message GetAccessRequestsRequest {
+  string chat_id = 1;
+}
+
+message AccessRequestList {
+  repeated Session requests = 1;
+}
+
+message GrantChatAccessRequest {
+  string chat_id = 1;
+  string session_id = 2;
+}
