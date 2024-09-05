@@ -2,7 +2,7 @@ package main
 
 import (
 	"chat/internal/storage"
-	"log"
+	"chat/pkg/logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	logger.Init()
+
 	cfg := config.NewConfig()
 
 	var storage storage.Storage
@@ -24,27 +26,34 @@ func main() {
 		storage = memory.NewMemoryStorage(cfg.MaxChatSize, cfg.MaxChatsCount)
 	case "redis":
 		// TODO: Implement Redis storage
-		log.Fatal("Redis storage not implemented yet")
+		logger.Log.Error("Redis storage not implemented yet")
+		os.Exit(1)
 	case "postgres":
 		// TODO: Implement Postgres storage
-		log.Fatal("Postgres storage not implemented yet")
+		logger.Log.Error("Postgres storage not implemented yet")
+		os.Exit(1)
 	default:
-		log.Fatalf("Unknown storage type: %s", cfg.StorageType)
+		logger.Log.Error("Unknown storage type", "type", cfg.StorageType)
+		os.Exit(1)
 	}
 
 	chatService := service.NewChatService(storage)
 	grpcServer := grpc.NewServer(chatService, cfg.GRPCPort)
 	httpServer := http.NewServer(cfg.HTTPPort, cfg.GRPCPort)
 
+	logger.Log.Info("Starting servers")
+
 	go func() {
 		if err := grpcServer.Start(); err != nil {
-			log.Fatalf("Failed to start gRPC server: %v", err)
+			logger.Log.Error("Failed to start gRPC server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	go func() {
 		if err := httpServer.Start(); err != nil {
-			log.Fatalf("Failed to start HTTP server: %v", err)
+			logger.Log.Error("Failed to start HTTP server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -52,9 +61,9 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down servers...")
+	logger.Log.Info("Shutting down servers")
 
 	grpcServer.Stop()
 	httpServer.Stop()
-	log.Println("Servers stopped")
+	logger.Log.Info("Servers stopped")
 }
