@@ -3,8 +3,9 @@ package middleware
 import (
 	"chat/pkg/metrics"
 	"context"
-	"google.golang.org/grpc"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 func MetricsInterceptor(

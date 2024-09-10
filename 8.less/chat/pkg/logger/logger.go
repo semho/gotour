@@ -18,7 +18,7 @@ type ColorHandler struct {
 	mu      sync.Mutex
 }
 
-func (h *ColorHandler) Handle(ctx context.Context, r slog.Record) error {
+func (h *ColorHandler) Handle(_ context.Context, r slog.Record) error {
 	level := r.Level.String()
 
 	var color string

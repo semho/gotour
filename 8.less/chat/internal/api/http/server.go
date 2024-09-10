@@ -1,10 +1,13 @@
 package http
 
 import (
+	"chat/pkg/logger"
 	"context"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net/http"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -51,8 +54,9 @@ func (s *Server) Start() error {
 	s.httpMux.Handle("/metrics", promhttp.Handler())
 
 	s.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.port),
-		Handler: s.httpMux,
+		Addr:              fmt.Sprintf(":%d", s.port),
+		Handler:           s.httpMux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	fmt.Printf("Starting HTTP server on port %d\n", s.port)
@@ -65,11 +69,17 @@ func (s *Server) Start() error {
 
 func (s *Server) Stop() {
 	if s.httpServer != nil {
-		s.httpServer.Shutdown(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.httpServer.Shutdown(ctx); err != nil {
+			logger.Log.Error("Error shutting down server", "error", err)
+		}
 	}
 }
 
-func (s *Server) healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	if _, err := w.Write([]byte("OK")); err != nil {
+		logger.Log.Error("Error writing response", "error", err)
+	}
 }

@@ -70,7 +70,7 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	}
 	return &pb.Chat{
 		Id:          chat.ID,
-		HistorySize: int32(chat.HistorySize),
+		HistorySize: req.HistorySize,
 		Ttl:         timestamppb.New(*chat.TTL),
 		ReadOnly:    chat.ReadOnly,
 		Private:     chat.Private,

@@ -9,7 +9,7 @@ import (
 	"chat/internal/storage"
 )
 
-type MemoryStorage struct {
+type Storage struct {
 	sessions       map[string]*models.Session
 	chats          map[string]*models.Chat
 	accessRequests map[string][]string
@@ -18,8 +18,8 @@ type MemoryStorage struct {
 	maxChatsCount  int
 }
 
-func NewMemoryStorage(maxChatSize, maxChatsCount int) *MemoryStorage {
-	return &MemoryStorage{
+func NewMemoryStorage(maxChatSize, maxChatsCount int) *Storage {
+	return &Storage{
 		sessions:       make(map[string]*models.Session),
 		chats:          make(map[string]*models.Chat),
 		accessRequests: make(map[string][]string),
@@ -28,7 +28,7 @@ func NewMemoryStorage(maxChatSize, maxChatsCount int) *MemoryStorage {
 	}
 }
 
-func (s *MemoryStorage) CreateSession(ctx context.Context, session *models.Session) error {
+func (s *Storage) CreateSession(_ context.Context, session *models.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -36,7 +36,7 @@ func (s *MemoryStorage) CreateSession(ctx context.Context, session *models.Sessi
 	return nil
 }
 
-func (s *MemoryStorage) GetSession(ctx context.Context, sessionID string) (*models.Session, error) {
+func (s *Storage) GetSession(_ context.Context, sessionID string) (*models.Session, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -47,7 +47,7 @@ func (s *MemoryStorage) GetSession(ctx context.Context, sessionID string) (*mode
 	return session, nil
 }
 
-func (s *MemoryStorage) CreateChat(ctx context.Context, chat *models.Chat) error {
+func (s *Storage) CreateChat(_ context.Context, chat *models.Chat) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -59,7 +59,7 @@ func (s *MemoryStorage) CreateChat(ctx context.Context, chat *models.Chat) error
 	return nil
 }
 
-func (s *MemoryStorage) GetChat(ctx context.Context, chatID string) (*models.Chat, error) {
+func (s *Storage) GetChat(_ context.Context, chatID string) (*models.Chat, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -70,7 +70,7 @@ func (s *MemoryStorage) GetChat(ctx context.Context, chatID string) (*models.Cha
 	return chat, nil
 }
 
-func (s *MemoryStorage) DeleteChat(ctx context.Context, chatID string) error {
+func (s *Storage) DeleteChat(_ context.Context, chatID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -79,7 +79,7 @@ func (s *MemoryStorage) DeleteChat(ctx context.Context, chatID string) error {
 	return nil
 }
 
-func (s *MemoryStorage) SetChatTTL(ctx context.Context, chatID string, ttl time.Time) error {
+func (s *Storage) SetChatTTL(_ context.Context, chatID string, ttl time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -91,7 +91,7 @@ func (s *MemoryStorage) SetChatTTL(ctx context.Context, chatID string, ttl time.
 	return nil
 }
 
-func (s *MemoryStorage) AddMessage(ctx context.Context, message *models.Message) error {
+func (s *Storage) AddMessage(_ context.Context, message *models.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -107,7 +107,7 @@ func (s *MemoryStorage) AddMessage(ctx context.Context, message *models.Message)
 	return nil
 }
 
-func (s *MemoryStorage) GetChatHistory(ctx context.Context, chatID string) ([]*models.Message, error) {
+func (s *Storage) GetChatHistory(_ context.Context, chatID string) ([]*models.Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -123,7 +123,7 @@ func (s *MemoryStorage) GetChatHistory(ctx context.Context, chatID string) ([]*m
 	return messages, nil
 }
 
-func (s *MemoryStorage) RequestChatAccess(ctx context.Context, chatID, sessionID string) error {
+func (s *Storage) RequestChatAccess(_ context.Context, chatID, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -131,7 +131,7 @@ func (s *MemoryStorage) RequestChatAccess(ctx context.Context, chatID, sessionID
 	return nil
 }
 
-func (s *MemoryStorage) GetAccessRequests(ctx context.Context, chatID string) ([]string, error) {
+func (s *Storage) GetAccessRequests(_ context.Context, chatID string) ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -142,7 +142,7 @@ func (s *MemoryStorage) GetAccessRequests(ctx context.Context, chatID string) ([
 	return requests, nil
 }
 
-func (s *MemoryStorage) GrantChatAccess(ctx context.Context, chatID, sessionID string) error {
+func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

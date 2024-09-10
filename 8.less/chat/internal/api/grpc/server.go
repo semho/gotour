@@ -5,10 +5,11 @@ import (
 	"chat/internal/service"
 	pb "chat/pkg/chat/v1"
 	"fmt"
+	"net"
+
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-	"net"
 )
 
 type Server struct {
