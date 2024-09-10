@@ -5,6 +5,7 @@ import (
 	"chat/internal/service"
 	pb "chat/pkg/chat/v1"
 	"fmt"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"net"
@@ -30,7 +31,12 @@ func (s *Server) Start() error {
 	}
 
 	s.grpcServer = grpc.NewServer(
-		grpc.UnaryInterceptor(middleware.AuthInterceptor),
+		grpc.UnaryInterceptor(
+			grpc_middleware.ChainUnaryServer(
+				middleware.AuthInterceptor,
+				middleware.MetricsInterceptor,
+			),
+		),
 	)
 	pb.RegisterChatServiceServer(s.grpcServer, s.chatService)
 
