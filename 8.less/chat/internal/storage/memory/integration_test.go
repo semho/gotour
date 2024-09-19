@@ -6,13 +6,14 @@ import (
 	pb "chat/pkg/chat/v1"
 	"chat/pkg/logger"
 	"context"
+	"log/slog"
+	"os"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"log/slog"
-	"os"
-	"testing"
 )
 
 func TestMain(m *testing.M) {

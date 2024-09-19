@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"chat/pkg/logger"
 	"context"
 
 	"google.golang.org/grpc"
@@ -21,26 +22,34 @@ func AuthInterceptor(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	// пропуск проверки для метода CreateSession, чтобы можно было создать сессию без самой сессии в контексте
+	logger.Log.Info("AuthInterceptor called for method", "method", info.FullMethod)
+
 	if info.FullMethod == "/chat_v1.ChatService/CreateSession" {
+		logger.Log.Info("Skipping auth for CreateSession")
 		return handler(ctx, req)
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
+		logger.Log.Error("Metadata not found in context")
 		return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
 	sessionIDs := md.Get("session_id")
 	if len(sessionIDs) == 0 {
+		logger.Log.Error("session_id not found in metadata")
 		return nil, status.Errorf(codes.Unauthenticated, "session_id is not provided")
 	}
 
 	sessionID := sessionIDs[0]
-	//TODO: можно добавить доп проверку id сессии
+	logger.Log.Info("Found session ID in AuthInterceptor", "session_id", sessionID)
 
 	newCtx := context.WithValue(ctx, SessionIDKey, sessionID)
-	return handler(newCtx, req)
+	resp, err := handler(newCtx, req)
+	if err != nil {
+		logger.Log.Error("Handler returned error in AuthInterceptor", "error", err)
+	}
+	return resp, err
 }
 
 // вытаскиваем id сессии из контекста

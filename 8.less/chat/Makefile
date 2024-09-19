@@ -1,4 +1,4 @@
-.PHONY: generate build test lint run
+.PHONY: generate build test lint run fmt
 
 CURDIR=$(shell pwd)
 LOCAL_BIN:=$(CURDIR)/bin
@@ -42,7 +42,11 @@ test:
 	@echo "Running tests..."
 	@go test -v ./...
 
-lint:
+fmt:
+	@echo "Running goimports..."
+	@goimports -w .
+
+lint: fmt
 	@echo "Running linter..."
 	@golangci-lint run
 

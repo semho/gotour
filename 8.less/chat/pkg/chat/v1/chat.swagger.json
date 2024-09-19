@@ -1,8 +1,9 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "chat/v1/chat.proto",
-    "version": "version not set"
+    "title": "Chat Service API",
+    "description": "API for chat service",
+    "version": "1.0"
   },
   "tags": [
     {
@@ -335,7 +336,8 @@
         ],
         "tags": [
           "ChatService"
-        ]
+        ],
+        "security": []
       }
     }
   },
@@ -476,5 +478,17 @@
         }
       }
     }
-  }
+  },
+  "securityDefinitions": {
+    "SessionId": {
+      "type": "apiKey",
+      "name": "Session-Id",
+      "in": "header"
+    }
+  },
+  "security": [
+    {
+      "SessionId": []
+    }
+  ]
 }

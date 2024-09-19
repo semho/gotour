@@ -100,7 +100,10 @@ func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
 	if testing.Verbose() {
-		io.Copy(os.Stdout, &buf)
+		_, err := io.Copy(os.Stdout, &buf)
+		if err != nil {
+			return
+		}
 	}
 
 	os.Exit(exitCode)
