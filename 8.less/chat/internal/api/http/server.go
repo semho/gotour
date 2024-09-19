@@ -4,7 +4,9 @@ import (
 	"chat/pkg/logger"
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -47,6 +49,12 @@ func (s *Server) Start() error {
 	// Обработчик gRPC-шлюза
 	s.httpMux.Handle("/", s.grpcMux)
 
+	// Swagger JSON
+	s.httpMux.HandleFunc("/swagger.json", s.serveSwaggerJSON)
+
+	// Swagger UI
+	s.httpMux.HandleFunc("/swagger/", s.serveSwaggerUI)
+
 	// health check endpoint
 	s.httpMux.HandleFunc("/health", s.healthCheckHandler)
 
@@ -60,6 +68,7 @@ func (s *Server) Start() error {
 	}
 
 	fmt.Printf("Starting HTTP server on port %d\n", s.port)
+	fmt.Printf("Swagger UI available at http://localhost:%d/swagger/\n", s.port)
 	if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("failed to serve: %v", err)
 	}
@@ -81,5 +90,52 @@ func (s *Server) healthCheckHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		logger.Log.Error("Error writing response", "error", err)
+	}
+}
+
+func (s *Server) serveSwaggerJSON(w http.ResponseWriter, r *http.Request) {
+	swaggerPath := filepath.Join("pkg", "chat", "v1", "chat.swagger.json")
+	http.ServeFile(w, r, swaggerPath)
+}
+
+func (s *Server) serveSwaggerUI(w http.ResponseWriter, r *http.Request) {
+	swaggerTemplate := `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/3.52.0/swagger-ui.css" >
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/3.52.0/swagger-ui-bundle.js"> </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/3.52.0/swagger-ui-standalone-preset.js"> </script>
+</head>
+<body>
+<div id="swagger-ui"></div>
+<script>
+    window.onload = function() {
+        SwaggerUIBundle({
+            url: "/swagger.json",
+            dom_id: '#swagger-ui',
+            presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset
+            ],
+            layout: "BaseLayout"
+        })
+    }
+</script>
+</body>
+</html>
+`
+	tmpl, err := template.New("swagger").Parse(swaggerTemplate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	err = tmpl.Execute(w, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

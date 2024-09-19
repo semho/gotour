@@ -14,7 +14,7 @@ var Log *slog.Logger
 
 type ColorHandler struct {
 	handler slog.Handler
-	w       io.Writer
+	W       io.Writer
 	mu      sync.Mutex
 }
 
@@ -52,17 +52,17 @@ func (h *ColorHandler) Handle(_ context.Context, r slog.Record) error {
 	attrsJSON, _ := json.Marshal(attrs)
 
 	// Print colored output
-	fmt.Fprintf(h.w, "%s%s [%s] %s %s\033[0m\n", color, timeStr, level, r.Message, string(attrsJSON))
+	fmt.Fprintf(h.W, "%s%s [%s] %s %s\033[0m\n", color, timeStr, level, r.Message, string(attrsJSON))
 
 	return nil
 }
 
 func (h *ColorHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &ColorHandler{handler: h.handler.WithAttrs(attrs), w: h.w}
+	return &ColorHandler{handler: h.handler.WithAttrs(attrs), W: h.W}
 }
 
 func (h *ColorHandler) WithGroup(name string) slog.Handler {
-	return &ColorHandler{handler: h.handler.WithGroup(name), w: h.w}
+	return &ColorHandler{handler: h.handler.WithGroup(name), W: h.W}
 }
 
 func (h *ColorHandler) Enabled(ctx context.Context, level slog.Level) bool {
@@ -72,7 +72,7 @@ func (h *ColorHandler) Enabled(ctx context.Context, level slog.Level) bool {
 func NewColorHandler(w io.Writer, opts *slog.HandlerOptions) *ColorHandler {
 	return &ColorHandler{
 		handler: slog.NewJSONHandler(w, opts),
-		w:       w,
+		W:       w,
 	}
 }
 

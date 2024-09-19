@@ -9,10 +9,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type contextKey string
+type ContextKey string
 
 const (
-	sessionIDKey contextKey = "session_id"
+	SessionIDKey ContextKey = "session_id"
 )
 
 func AuthInterceptor(
@@ -39,12 +39,12 @@ func AuthInterceptor(
 	sessionID := sessionIDs[0]
 	//TODO: можно добавить доп проверку id сессии
 
-	newCtx := context.WithValue(ctx, sessionIDKey, sessionID)
+	newCtx := context.WithValue(ctx, SessionIDKey, sessionID)
 	return handler(newCtx, req)
 }
 
 // вытаскиваем id сессии из контекста
 func GetSessionID(ctx context.Context) (string, bool) {
-	sessionID, ok := ctx.Value(sessionIDKey).(string)
+	sessionID, ok := ctx.Value(SessionIDKey).(string)
 	return sessionID, ok
 }

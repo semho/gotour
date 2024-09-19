@@ -40,7 +40,7 @@ build: generate
 
 test:
 	@echo "Running tests..."
-	@go test ./...
+	@go test -v ./...
 
 lint:
 	@echo "Running linter..."
