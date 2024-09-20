@@ -2,6 +2,7 @@ package service
 
 import (
 	"chat/internal/middleware"
+	"chat/pkg/customerrors"
 	"chat/pkg/logger"
 	"context"
 	"errors"
@@ -15,11 +16,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-var (
-	ErrAccessAlreadyRequested = errors.New("access already requested")
-	ErrAccessAlreadyExist     = errors.New("access already exists")
 )
 
 type ChatService struct {
@@ -63,13 +59,19 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
 	}
 
+	_, err := s.storage.GetSession(ctx, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to get session", "error", err)
+		return nil, status.Errorf(codes.Unauthenticated, "invalid session: %v", err)
+	}
+
 	var ttl *time.Time
 	if req.TtlSeconds > 0 {
 		t := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second)
 		ttl = &t
 	}
 	chat := models.NewChat(int(req.HistorySize), ttl, req.ReadOnly, req.Private, sessionID)
-	err := s.storage.CreateChat(ctx, chat)
+	err = s.storage.CreateChat(ctx, chat)
 	if err != nil {
 		logger.Log.Error("Failed to create chat", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to create chat: %v", err)
@@ -134,8 +136,15 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 
 	chat, err := s.storage.GetChat(ctx, chatID)
 	if err != nil {
+		var chatErr *customerrors.ChatError
+		if errors.As(err, &chatErr) {
+			if errors.Is(chatErr.Err, customerrors.ErrChatNotFound) {
+				logger.Log.Error("Chat not found", "chatID", chatID)
+				return "", nil, status.Errorf(codes.NotFound, "chat not found in service: %v", err)
+			}
+		}
 		logger.Log.Error("Failed to get chat", "error", err)
-		return "", nil, status.Errorf(codes.NotFound, "chat not found: %v", err)
+		return "", nil, status.Errorf(codes.Internal, "failed to get chat: %v", err)
 	}
 
 	if chat.TTL != nil && time.Now().After(*chat.TTL) {
@@ -242,9 +251,9 @@ func (s *ChatService) RequestChatAccess(
 	if err != nil {
 		if err != nil {
 			switch err {
-			case ErrAccessAlreadyRequested:
+			case customerrors.ErrAccessAlreadyRequested:
 				return &pb.RequestChatAccessResponse{Status: "request_already_sent"}, nil
-			case ErrAccessAlreadyExist:
+			case customerrors.ErrAccessAlreadyExist:
 				return &pb.RequestChatAccessResponse{Status: "already_has_access"}, nil
 			default:
 				logger.Log.Error("Failed to request chat access", "error", err)

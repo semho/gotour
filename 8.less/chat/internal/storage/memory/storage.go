@@ -1,12 +1,12 @@
 package memory
 
 import (
+	"chat/pkg/customerrors"
 	"context"
 	"sync"
 	"time"
 
 	"chat/internal/models"
-	"chat/internal/storage"
 )
 
 type Storage struct {
@@ -42,7 +42,7 @@ func (s *Storage) GetSession(_ context.Context, sessionID string) (*models.Sessi
 
 	session, ok := s.sessions[sessionID]
 	if !ok {
-		return nil, storage.ErrSessionNotFound
+		return nil, customerrors.NewSessionError(sessionID, customerrors.ErrSessionNotFound)
 	}
 	return session, nil
 }
@@ -52,7 +52,7 @@ func (s *Storage) CreateChat(_ context.Context, chat *models.Chat) error {
 	defer s.mu.Unlock()
 
 	if len(s.chats) >= s.maxChatsCount {
-		return storage.ErrMaxNumberReached
+		return customerrors.NewChatError(chat.ID, customerrors.ErrMaxNumberReached)
 	}
 
 	s.chats[chat.ID] = chat
@@ -65,7 +65,7 @@ func (s *Storage) GetChat(_ context.Context, chatID string) (*models.Chat, error
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return nil, storage.ErrChatNotFound
+		return nil, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 	return chat, nil
 }
@@ -85,7 +85,7 @@ func (s *Storage) SetChatTTL(_ context.Context, chatID string, ttl time.Time) er
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return storage.ErrChatNotFound
+		return customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 	chat.TTL = &ttl
 	return nil
@@ -97,7 +97,7 @@ func (s *Storage) AddMessage(_ context.Context, message *models.Message) error {
 
 	chat, ok := s.chats[message.ChatID]
 	if !ok {
-		return storage.ErrChatNotFound
+		return customerrors.NewChatError(chat.ID, customerrors.ErrChatNotFound)
 	}
 
 	if len(chat.Messages) >= chat.HistorySize {
@@ -113,7 +113,7 @@ func (s *Storage) GetChatHistory(_ context.Context, chatID string) ([]*models.Me
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return nil, storage.ErrChatNotFound
+		return nil, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 
 	messages := make([]*models.Message, len(chat.Messages))
@@ -129,22 +129,22 @@ func (s *Storage) RequestChatAccess(_ context.Context, chatID, sessionID string)
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return storage.ErrChatNotFound
+		return customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 
 	if chat.OwnerID == sessionID {
-		return storage.ErrAccessAlreadyExist
+		return customerrors.NewChatError(chatID, customerrors.ErrAccessAlreadyExist)
 	}
 
 	for _, id := range chat.AllowedUsers {
 		if id == sessionID {
-			return storage.ErrAccessAlreadyExist
+			return customerrors.NewChatError(chatID, customerrors.ErrAccessAlreadyExist)
 		}
 	}
 
 	for _, id := range s.accessRequests[chatID] {
 		if id == sessionID {
-			return storage.ErrAccessAlreadyRequested
+			return customerrors.NewChatError(chatID, customerrors.ErrAccessAlreadyRequested)
 		}
 	}
 
@@ -158,7 +158,7 @@ func (s *Storage) GetAccessRequests(_ context.Context, chatID string) ([]string,
 
 	requests, ok := s.accessRequests[chatID]
 	if !ok {
-		return nil, storage.ErrChatNotFound
+		return nil, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 	return requests, nil
 }
@@ -169,7 +169,7 @@ func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) e
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return storage.ErrChatNotFound
+		return customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 	chat.AllowedUsers = append(chat.AllowedUsers, sessionID)
 	requests := s.accessRequests[chatID]
@@ -189,7 +189,7 @@ func (s *Storage) HasChatAccess(ctx context.Context, chatID, sessionID string) (
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return false, storage.ErrChatNotFound
+		return false, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 
 	if !chat.Private {
@@ -215,7 +215,7 @@ func (s *Storage) IsChatOwner(_ context.Context, chatID, sessionID string) (bool
 
 	chat, ok := s.chats[chatID]
 	if !ok {
-		return false, storage.ErrChatNotFound
+		return false, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
 	}
 
 	return chat.OwnerID == sessionID, nil

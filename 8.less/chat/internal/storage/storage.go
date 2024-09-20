@@ -3,16 +3,7 @@ package storage
 import (
 	"chat/internal/models"
 	"context"
-	"errors"
 	"time"
-)
-
-var (
-	ErrSessionNotFound        = errors.New("session not found")
-	ErrChatNotFound           = errors.New("chat not found")
-	ErrMaxNumberReached       = errors.New("maximum number of chats reached")
-	ErrAccessAlreadyExist     = errors.New("access already exists")
-	ErrAccessAlreadyRequested = errors.New("access already requested")
 )
 
 type Storage interface {
