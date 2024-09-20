@@ -4,6 +4,7 @@ import (
 	"chat/internal/middleware"
 	"chat/pkg/logger"
 	"context"
+	"errors"
 	"time"
 
 	"chat/internal/models"
@@ -14,6 +15,11 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	ErrAccessAlreadyRequested = errors.New("access already requested")
+	ErrAccessAlreadyExist     = errors.New("access already exists")
 )
 
 type ChatService struct {
@@ -80,7 +86,21 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 
 func (s *ChatService) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest) (*emptypb.Empty, error) {
 	logger.Log.Info("Deleting chat", "ChatId", req.ChatId)
-	err := s.storage.DeleteChat(ctx, req.ChatId)
+	sessionID, ok := middleware.GetSessionID(ctx)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+	}
+
+	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to check chat ownership", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+	}
+	if !isOwner {
+		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can delete the chat")
+	}
+
+	err = s.storage.DeleteChat(ctx, req.ChatId)
 	if err != nil {
 		logger.Log.Error("Failed to delete chat", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to delete chat: %v", err)
@@ -189,19 +209,50 @@ func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistory
 	return &pb.ChatHistory{Messages: pbMessages}, nil
 }
 
-func (s *ChatService) RequestChatAccess(ctx context.Context, req *pb.RequestChatAccessRequest) (*emptypb.Empty, error) {
+func (s *ChatService) RequestChatAccess(
+	ctx context.Context,
+	req *pb.RequestChatAccessRequest,
+) (*pb.RequestChatAccessResponse, error) {
 	logger.Log.Info("Request chat access", "ChatId", req.ChatId)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
 	}
 
-	err := s.storage.RequestChatAccess(ctx, req.ChatId, sessionID)
+	chat, err := s.storage.GetChat(ctx, req.ChatId)
 	if err != nil {
-		logger.Log.Error("failed to request chat access:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to request chat access: %v", err)
+		logger.Log.Error("Failed to get chat", "error", err)
+		return nil, status.Errorf(codes.NotFound, "chat not found: %v", err)
 	}
-	return &emptypb.Empty{}, nil
+
+	if !chat.Private {
+		return nil, status.Errorf(codes.FailedPrecondition, "chat is not private")
+	}
+
+	hasAccess, err := s.storage.HasChatAccess(ctx, req.ChatId, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to check chat access", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to check chat access: %v", err)
+	}
+	if hasAccess {
+		return &pb.RequestChatAccessResponse{Status: "already_has_access"}, nil
+	}
+
+	err = s.storage.RequestChatAccess(ctx, req.ChatId, sessionID)
+	if err != nil {
+		if err != nil {
+			switch err {
+			case ErrAccessAlreadyRequested:
+				return &pb.RequestChatAccessResponse{Status: "request_already_sent"}, nil
+			case ErrAccessAlreadyExist:
+				return &pb.RequestChatAccessResponse{Status: "already_has_access"}, nil
+			default:
+				logger.Log.Error("Failed to request chat access", "error", err)
+				return nil, status.Errorf(codes.Internal, "failed to request chat access: %v", err)
+			}
+		}
+	}
+	return &pb.RequestChatAccessResponse{Status: "request_sent"}, nil
 }
 
 func (s *ChatService) GetAccessRequests(ctx context.Context, req *pb.GetAccessRequestsRequest) (
@@ -209,32 +260,65 @@ func (s *ChatService) GetAccessRequests(ctx context.Context, req *pb.GetAccessRe
 	error,
 ) {
 	logger.Log.Info("Get access request", "ChatId", req.ChatId)
+	sessionID, ok := middleware.GetSessionID(ctx)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+	}
+
+	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to check chat ownership", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+	}
+	if !isOwner {
+		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can view access requests")
+	}
+
 	sessionIDs, err := s.storage.GetAccessRequests(ctx, req.ChatId)
 	if err != nil {
 		logger.Log.Error("failed to get access requests:", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to get access requests: %v", err)
 	}
-	requests := make([]*pb.Session, len(sessionIDs))
-	for i, id := range sessionIDs {
+	requests := make([]*pb.Session, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
 		session, err := s.storage.GetSession(ctx, id)
 		if err != nil {
-			logger.Log.Error("failed to get session info:", "error", err)
-			return nil, status.Errorf(codes.Internal, "failed to get session info: %v", err)
+			logger.Log.Error("Failed to get session info", "error", err)
+			continue
 		}
-		requests[i] = &pb.Session{
-			Id:       session.ID,
-			Nickname: session.Nickname,
-		}
+		requests = append(
+			requests, &pb.Session{
+				Id:       session.ID,
+				Nickname: session.Nickname,
+			},
+		)
 	}
 	return &pb.AccessRequestList{Requests: requests}, nil
 }
 
-func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAccessRequest) (*emptypb.Empty, error) {
+func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAccessRequest) (
+	*pb.GrantChatAccessResponse,
+	error,
+) {
 	logger.Log.Info("Grant chat access", "ChatId", req.ChatId)
-	err := s.storage.GrantChatAccess(ctx, req.ChatId, req.SessionId)
+	sessionID, ok := middleware.GetSessionID(ctx)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+	}
+
+	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to check chat ownership", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+	}
+	if !isOwner {
+		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can grant access")
+	}
+
+	err = s.storage.GrantChatAccess(ctx, req.ChatId, req.SessionId)
 	if err != nil {
 		logger.Log.Error("failed to grant chat access:", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to grant chat access: %v", err)
 	}
-	return &emptypb.Empty{}, nil
+	return &pb.GrantChatAccessResponse{Status: "access_granted"}, nil
 }

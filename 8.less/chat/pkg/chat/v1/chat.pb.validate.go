@@ -1280,6 +1280,110 @@ var _ interface {
 	ErrorName() string
 } = RequestChatAccessRequestValidationError{}
 
+// Validate checks the field values on RequestChatAccessResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the first error encountered is returned, or nil if there are no violations.
+func (m *RequestChatAccessResponse) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on RequestChatAccessResponse with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, the result is a list of violation errors wrapped in
+// RequestChatAccessResponseMultiError, or nil if none found.
+func (m *RequestChatAccessResponse) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *RequestChatAccessResponse) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Status
+
+	if len(errors) > 0 {
+		return RequestChatAccessResponseMultiError(errors)
+	}
+
+	return nil
+}
+
+// RequestChatAccessResponseMultiError is an error wrapping multiple validation
+// errors returned by RequestChatAccessResponse.ValidateAll() if the
+// designated constraints aren't met.
+type RequestChatAccessResponseMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m RequestChatAccessResponseMultiError) Error() string {
+	var msgs []string
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m RequestChatAccessResponseMultiError) AllErrors() []error { return m }
+
+// RequestChatAccessResponseValidationError is the validation error returned by
+// RequestChatAccessResponse.Validate if the designated constraints aren't met.
+type RequestChatAccessResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e RequestChatAccessResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e RequestChatAccessResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e RequestChatAccessResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e RequestChatAccessResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e RequestChatAccessResponseValidationError) ErrorName() string {
+	return "RequestChatAccessResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e RequestChatAccessResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sRequestChatAccessResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = RequestChatAccessResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = RequestChatAccessResponseValidationError{}
+
 // Validate checks the field values on GetAccessRequestsRequest with the rules
 // defined in the proto definition for this message. If any rules are
 // violated, the first error encountered is returned, or nil if there are no violations.
@@ -1625,3 +1729,107 @@ var _ interface {
 	Cause() error
 	ErrorName() string
 } = GrantChatAccessRequestValidationError{}
+
+// Validate checks the field values on GrantChatAccessResponse with the rules
+// defined in the proto definition for this message. If any rules are
+// violated, the first error encountered is returned, or nil if there are no violations.
+func (m *GrantChatAccessResponse) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on GrantChatAccessResponse with the
+// rules defined in the proto definition for this message. If any rules are
+// violated, the result is a list of violation errors wrapped in
+// GrantChatAccessResponseMultiError, or nil if none found.
+func (m *GrantChatAccessResponse) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *GrantChatAccessResponse) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Status
+
+	if len(errors) > 0 {
+		return GrantChatAccessResponseMultiError(errors)
+	}
+
+	return nil
+}
+
+// GrantChatAccessResponseMultiError is an error wrapping multiple validation
+// errors returned by GrantChatAccessResponse.ValidateAll() if the designated
+// constraints aren't met.
+type GrantChatAccessResponseMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m GrantChatAccessResponseMultiError) Error() string {
+	var msgs []string
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m GrantChatAccessResponseMultiError) AllErrors() []error { return m }
+
+// GrantChatAccessResponseValidationError is the validation error returned by
+// GrantChatAccessResponse.Validate if the designated constraints aren't met.
+type GrantChatAccessResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GrantChatAccessResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GrantChatAccessResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GrantChatAccessResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GrantChatAccessResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GrantChatAccessResponseValidationError) ErrorName() string {
+	return "GrantChatAccessResponseValidationError"
+}
+
+// Error satisfies the builtin error interface
+func (e GrantChatAccessResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGrantChatAccessResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GrantChatAccessResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GrantChatAccessResponseValidationError{}

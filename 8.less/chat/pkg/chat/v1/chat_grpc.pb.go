@@ -8,7 +8,6 @@ package chat_v1
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -30,9 +29,9 @@ type ChatServiceClient interface {
 	SetChatTTL(ctx context.Context, in *SetChatTTLRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*Message, error)
 	GetChatHistory(ctx context.Context, in *GetChatHistoryRequest, opts ...grpc.CallOption) (*ChatHistory, error)
-	RequestChatAccess(ctx context.Context, in *RequestChatAccessRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RequestChatAccess(ctx context.Context, in *RequestChatAccessRequest, opts ...grpc.CallOption) (*RequestChatAccessResponse, error)
 	GetAccessRequests(ctx context.Context, in *GetAccessRequestsRequest, opts ...grpc.CallOption) (*AccessRequestList, error)
-	GrantChatAccess(ctx context.Context, in *GrantChatAccessRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GrantChatAccess(ctx context.Context, in *GrantChatAccessRequest, opts ...grpc.CallOption) (*GrantChatAccessResponse, error)
 }
 
 type chatServiceClient struct {
@@ -97,8 +96,8 @@ func (c *chatServiceClient) GetChatHistory(ctx context.Context, in *GetChatHisto
 	return out, nil
 }
 
-func (c *chatServiceClient) RequestChatAccess(ctx context.Context, in *RequestChatAccessRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *chatServiceClient) RequestChatAccess(ctx context.Context, in *RequestChatAccessRequest, opts ...grpc.CallOption) (*RequestChatAccessResponse, error) {
+	out := new(RequestChatAccessResponse)
 	err := c.cc.Invoke(ctx, "/chat_v1.ChatService/RequestChatAccess", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -115,8 +114,8 @@ func (c *chatServiceClient) GetAccessRequests(ctx context.Context, in *GetAccess
 	return out, nil
 }
 
-func (c *chatServiceClient) GrantChatAccess(ctx context.Context, in *GrantChatAccessRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *chatServiceClient) GrantChatAccess(ctx context.Context, in *GrantChatAccessRequest, opts ...grpc.CallOption) (*GrantChatAccessResponse, error) {
+	out := new(GrantChatAccessResponse)
 	err := c.cc.Invoke(ctx, "/chat_v1.ChatService/GrantChatAccess", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -134,9 +133,9 @@ type ChatServiceServer interface {
 	SetChatTTL(context.Context, *SetChatTTLRequest) (*emptypb.Empty, error)
 	SendMessage(context.Context, *SendMessageRequest) (*Message, error)
 	GetChatHistory(context.Context, *GetChatHistoryRequest) (*ChatHistory, error)
-	RequestChatAccess(context.Context, *RequestChatAccessRequest) (*emptypb.Empty, error)
+	RequestChatAccess(context.Context, *RequestChatAccessRequest) (*RequestChatAccessResponse, error)
 	GetAccessRequests(context.Context, *GetAccessRequestsRequest) (*AccessRequestList, error)
-	GrantChatAccess(context.Context, *GrantChatAccessRequest) (*emptypb.Empty, error)
+	GrantChatAccess(context.Context, *GrantChatAccessRequest) (*GrantChatAccessResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -162,13 +161,13 @@ func (UnimplementedChatServiceServer) SendMessage(context.Context, *SendMessageR
 func (UnimplementedChatServiceServer) GetChatHistory(context.Context, *GetChatHistoryRequest) (*ChatHistory, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChatHistory not implemented")
 }
-func (UnimplementedChatServiceServer) RequestChatAccess(context.Context, *RequestChatAccessRequest) (*emptypb.Empty, error) {
+func (UnimplementedChatServiceServer) RequestChatAccess(context.Context, *RequestChatAccessRequest) (*RequestChatAccessResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestChatAccess not implemented")
 }
 func (UnimplementedChatServiceServer) GetAccessRequests(context.Context, *GetAccessRequestsRequest) (*AccessRequestList, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAccessRequests not implemented")
 }
-func (UnimplementedChatServiceServer) GrantChatAccess(context.Context, *GrantChatAccessRequest) (*emptypb.Empty, error) {
+func (UnimplementedChatServiceServer) GrantChatAccess(context.Context, *GrantChatAccessRequest) (*GrantChatAccessResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GrantChatAccess not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}

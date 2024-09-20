@@ -115,8 +115,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "type": "object",
-              "properties": {}
+              "$ref": "#/definitions/chat_v1RequestChatAccessResponse"
             }
           },
           "default": {
@@ -152,8 +151,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "type": "object",
-              "properties": {}
+              "$ref": "#/definitions/chat_v1GrantChatAccessResponse"
             }
           },
           "default": {
@@ -418,6 +416,14 @@
         }
       }
     },
+    "chat_v1GrantChatAccessResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
+        }
+      }
+    },
     "chat_v1Message": {
       "type": "object",
       "properties": {
@@ -436,6 +442,14 @@
         "timestamp": {
           "type": "string",
           "format": "date-time"
+        }
+      }
+    },
+    "chat_v1RequestChatAccessResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string"
         }
       }
     },

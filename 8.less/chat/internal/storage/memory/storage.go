@@ -127,6 +127,27 @@ func (s *Storage) RequestChatAccess(_ context.Context, chatID, sessionID string)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	chat, ok := s.chats[chatID]
+	if !ok {
+		return storage.ErrChatNotFound
+	}
+
+	if chat.OwnerID == sessionID {
+		return storage.ErrAccessAlreadyExist
+	}
+
+	for _, id := range chat.AllowedUsers {
+		if id == sessionID {
+			return storage.ErrAccessAlreadyExist
+		}
+	}
+
+	for _, id := range s.accessRequests[chatID] {
+		if id == sessionID {
+			return storage.ErrAccessAlreadyRequested
+		}
+	}
+
 	s.accessRequests[chatID] = append(s.accessRequests[chatID], sessionID)
 	return nil
 }
@@ -162,7 +183,7 @@ func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) e
 	return nil
 }
 
-func (s *Storage) HasChatAccess(_ context.Context, chatID, sessionID string) (bool, error) {
+func (s *Storage) HasChatAccess(ctx context.Context, chatID, sessionID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -186,4 +207,16 @@ func (s *Storage) HasChatAccess(_ context.Context, chatID, sessionID string) (bo
 	}
 
 	return false, nil
+}
+
+func (s *Storage) IsChatOwner(_ context.Context, chatID, sessionID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	chat, ok := s.chats[chatID]
+	if !ok {
+		return false, storage.ErrChatNotFound
+	}
+
+	return chat.OwnerID == sessionID, nil
 }

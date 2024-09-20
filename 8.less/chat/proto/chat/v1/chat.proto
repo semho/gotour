@@ -73,7 +73,7 @@ service ChatService {
       get: "/v1/chat/{chat_id}/history"
     };
   }
-  rpc RequestChatAccess(RequestChatAccessRequest) returns (google.protobuf.Empty) {
+  rpc RequestChatAccess(RequestChatAccessRequest) returns (RequestChatAccessResponse) {
     option (google.api.http) = {
       post: "/v1/chat/{chat_id}/access"
       body: "*"
@@ -84,7 +84,7 @@ service ChatService {
       get: "/v1/chat/{chat_id}/access"
     };
   }
-  rpc GrantChatAccess(GrantChatAccessRequest) returns (google.protobuf.Empty) {
+  rpc GrantChatAccess(GrantChatAccessRequest) returns (GrantChatAccessResponse) {
     option (google.api.http) = {
       put: "/v1/chat/{chat_id}/access"
       body: "*"
@@ -151,6 +151,10 @@ message RequestChatAccessRequest {
   string chat_id = 1;
 }
 
+message RequestChatAccessResponse {
+  string status = 1;
+}
+
 message GetAccessRequestsRequest {
   string chat_id = 1;
 }
@@ -162,4 +166,8 @@ message AccessRequestList {
 message GrantChatAccessRequest {
   string chat_id = 1;
   string session_id = 2;
+}
+
+message GrantChatAccessResponse {
+  string status = 1;
 }

@@ -8,9 +8,11 @@ import (
 )
 
 var (
-	ErrSessionNotFound  = errors.New("session not found")
-	ErrChatNotFound     = errors.New("chat not found")
-	ErrMaxNumberReached = errors.New("maximum number of chats reached")
+	ErrSessionNotFound        = errors.New("session not found")
+	ErrChatNotFound           = errors.New("chat not found")
+	ErrMaxNumberReached       = errors.New("maximum number of chats reached")
+	ErrAccessAlreadyExist     = errors.New("access already exists")
+	ErrAccessAlreadyRequested = errors.New("access already requested")
 )
 
 type Storage interface {
@@ -29,4 +31,5 @@ type Storage interface {
 	GetAccessRequests(ctx context.Context, chatID string) ([]string, error)
 	GrantChatAccess(ctx context.Context, chatID, sessionID string) error
 	HasChatAccess(ctx context.Context, chatID, sessionID string) (bool, error)
+	IsChatOwner(ctx context.Context, chatID, sessionID string) (bool, error)
 }
