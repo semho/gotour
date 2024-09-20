@@ -100,8 +100,12 @@ func (s *Storage) AddMessage(_ context.Context, message *models.Message) error {
 		return customerrors.NewChatError(chat.ID, customerrors.ErrChatNotFound)
 	}
 
-	if len(chat.Messages) >= chat.HistorySize {
-		chat.Messages = chat.Messages[1:]
+	if chat.HistorySize > 0 && len(chat.Messages) >= chat.HistorySize {
+		if len(chat.Messages) > 0 {
+			chat.Messages = chat.Messages[1:]
+		} else {
+			chat.Messages = []models.Message{}
+		}
 	}
 	chat.Messages = append(chat.Messages, *message)
 	return nil

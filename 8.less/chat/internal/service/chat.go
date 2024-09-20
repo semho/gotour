@@ -56,13 +56,16 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	_, err := s.storage.GetSession(ctx, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to get session", "error", err)
-		return nil, status.Errorf(codes.Unauthenticated, "invalid session: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
+		return nil, status.Errorf(
+			codes.Unauthenticated,
+			customerrors.FormatError(customerrors.ErrMsgInvalidSession, err),
+		)
 	}
 
 	var ttl *time.Time
@@ -73,8 +76,8 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	chat := models.NewChat(int(req.HistorySize), ttl, req.ReadOnly, req.Private, sessionID)
 	err = s.storage.CreateChat(ctx, chat)
 	if err != nil {
-		logger.Log.Error("Failed to create chat", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to create chat: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCreateChat, "error", err)
+		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToCreateChat, err))
 	}
 	return &pb.Chat{
 		Id:          chat.ID,
@@ -90,22 +93,25 @@ func (s *ChatService) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest)
 	logger.Log.Info("Deleting chat", "ChatId", req.ChatId)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to check chat ownership", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
+		)
 	}
 	if !isOwner {
-		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can delete the chat")
+		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgOnlyChatOwnerCanDeleteChat)
 	}
 
 	err = s.storage.DeleteChat(ctx, req.ChatId)
 	if err != nil {
-		logger.Log.Error("Failed to delete chat", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to delete chat: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToDeleteChat, "error", err)
+		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToDeleteChat, err))
 	}
 	return &emptypb.Empty{}, nil
 }
@@ -114,28 +120,34 @@ func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest)
 	logger.Log.Info("Set ttl", "TtlSeconds", req.TtlSeconds)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
 	if err != nil {
 		var chatErr *customerrors.ChatError
 		if errors.As(err, &chatErr) && errors.Is(chatErr.Err, customerrors.ErrChatNotFound) {
-			logger.Log.Error("Chat not found in service", "ChatId", req.ChatId)
-			return nil, status.Errorf(codes.NotFound, "chat not found in service: %v", err)
+			logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "ChatId", req.ChatId)
+			return nil, status.Errorf(
+				codes.NotFound,
+				customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
+			)
 		}
-		logger.Log.Error("Failed to check chat ownership", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
+		)
 	}
 	if !isOwner {
-		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can set TTL")
+		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgOnlyChatOwnerCanSetTTL)
 	}
 
 	newTTL := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second)
 	err = s.storage.SetChatTTL(ctx, req.ChatId, newTTL)
 	if err != nil {
-		logger.Log.Error("failed to set chat TTL:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to set chat TTL: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToSetChatTTL, "error", err)
+		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToSetChatTTL, err))
 	}
 	logger.Log.Info("Chat TTL set successfully", "ChatId", req.ChatId, "NewTTL", newTTL)
 	return &emptypb.Empty{}, nil
@@ -144,14 +156,17 @@ func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest)
 func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (string, *models.Chat, error) {
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		logger.Log.Error("Session ID not found in context")
-		return "", nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		logger.Log.Error(customerrors.ErrMsgSessionNotFound)
+		return "", nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	_, err := s.storage.GetSession(ctx, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to get session", "error", err)
-		return "", nil, status.Errorf(codes.Unauthenticated, "invalid session: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
+		return "", nil, status.Errorf(
+			codes.Unauthenticated,
+			customerrors.FormatError(customerrors.ErrMsgInvalidSession, err),
+		)
 	}
 
 	chat, err := s.storage.GetChat(ctx, chatID)
@@ -159,26 +174,35 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 		var chatErr *customerrors.ChatError
 		if errors.As(err, &chatErr) {
 			if errors.Is(chatErr.Err, customerrors.ErrChatNotFound) {
-				logger.Log.Error("Chat not found", "chatID", chatID)
-				return "", nil, status.Errorf(codes.NotFound, "chat not found in service: %v", err)
+				logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "chatID", chatID)
+				return "", nil, status.Errorf(
+					codes.NotFound,
+					customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
+				)
 			}
 		}
-		logger.Log.Error("Failed to get chat", "error", err)
-		return "", nil, status.Errorf(codes.Internal, "failed to get chat: %v", err)
+		logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "error", err)
+		return "", nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
+		)
 	}
 
 	if chat.TTL != nil && time.Now().After(*chat.TTL) {
-		return "", nil, status.Errorf(codes.FailedPrecondition, "chat has expired")
+		return "", nil, status.Errorf(codes.FailedPrecondition, customerrors.ErrMsgChatExpired)
 	}
 
 	if chat.Private {
 		hasAccess, err := s.storage.HasChatAccess(ctx, chatID, sessionID)
 		if err != nil {
-			logger.Log.Error("Failed to check chat access", "error", err)
-			return "", nil, status.Errorf(codes.Internal, "failed to check chat access: %v", err)
+			logger.Log.Error(customerrors.ErrMsgFailedToCheckChatAccess, "error", err)
+			return "", nil, status.Errorf(
+				codes.Internal,
+				customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatAccess, err),
+			)
 		}
 		if !hasAccess {
-			return "", nil, status.Errorf(codes.PermissionDenied, "no access to private chat")
+			return "", nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgNoAccessToPrivateChat)
 		}
 	}
 
@@ -193,14 +217,14 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 	}
 
 	if chat.ReadOnly && chat.OwnerID != sessionID {
-		return nil, status.Errorf(codes.PermissionDenied, "chat is read-only")
+		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgChatIsReadOnly)
 	}
 
 	message := models.NewMessage(req.ChatId, sessionID, req.Text)
 	err = s.storage.AddMessage(ctx, message)
 	if err != nil {
-		logger.Log.Error("failed to send messag:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to send message: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToSendMessage, "error", err)
+		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToSendMessage, err))
 	}
 	return &pb.Message{
 		Id:        message.ID,
@@ -221,8 +245,11 @@ func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistory
 
 	messages, err := s.storage.GetChatHistory(ctx, req.ChatId)
 	if err != nil {
-		logger.Log.Error("failed to get chat history:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to get chat history: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToGetChatHistory, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToGetChatHistory, err),
+		)
 	}
 
 	pbMessages := make([]*pb.Message, len(messages))
@@ -245,23 +272,26 @@ func (s *ChatService) RequestChatAccess(
 	logger.Log.Info("Request chat access", "ChatId", req.ChatId)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	chat, err := s.storage.GetChat(ctx, req.ChatId)
 	if err != nil {
-		logger.Log.Error("Failed to get chat", "error", err)
-		return nil, status.Errorf(codes.NotFound, "chat not found: %v", err)
+		logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "error", err)
+		return nil, status.Errorf(codes.NotFound, customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err))
 	}
 
 	if !chat.Private {
-		return nil, status.Errorf(codes.FailedPrecondition, "chat is not private")
+		return nil, status.Errorf(codes.FailedPrecondition, customerrors.ErrMsgChatIsNotPrivate)
 	}
 
 	hasAccess, err := s.storage.HasChatAccess(ctx, req.ChatId, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to check chat access", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to check chat access: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatAccess, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatAccess, err),
+		)
 	}
 	if hasAccess {
 		return &pb.RequestChatAccessResponse{Status: "already_has_access"}, nil
@@ -276,8 +306,11 @@ func (s *ChatService) RequestChatAccess(
 			case customerrors.ErrAccessAlreadyExist:
 				return &pb.RequestChatAccessResponse{Status: "already_has_access"}, nil
 			default:
-				logger.Log.Error("Failed to request chat access", "error", err)
-				return nil, status.Errorf(codes.Internal, "failed to request chat access: %v", err)
+				logger.Log.Error(customerrors.ErrMsgFailedToRequestChatAccess, "error", err)
+				return nil, status.Errorf(
+					codes.Internal,
+					customerrors.FormatError(customerrors.ErrMsgFailedToRequestChatAccess, err),
+				)
 			}
 		}
 	}
@@ -291,28 +324,34 @@ func (s *ChatService) GetAccessRequests(ctx context.Context, req *pb.GetAccessRe
 	logger.Log.Info("Get access request", "ChatId", req.ChatId)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to check chat ownership", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
+		)
 	}
 	if !isOwner {
-		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can view access requests")
+		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgOnlyChatOwnerCanViewAccessRequests)
 	}
 
 	sessionIDs, err := s.storage.GetAccessRequests(ctx, req.ChatId)
 	if err != nil {
-		logger.Log.Error("failed to get access requests:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to get access requests: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToGetAccessRequests, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToGetAccessRequests, err),
+		)
 	}
 	requests := make([]*pb.Session, 0, len(sessionIDs))
 	for _, id := range sessionIDs {
 		session, err := s.storage.GetSession(ctx, id)
 		if err != nil {
-			logger.Log.Error("Failed to get session info", "error", err)
+			logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
 			continue
 		}
 		requests = append(
@@ -332,22 +371,28 @@ func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAcce
 	logger.Log.Info("Grant chat access", "ChatId", req.ChatId)
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
 	}
 
 	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
 	if err != nil {
-		logger.Log.Error("Failed to check chat ownership", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
+		)
 	}
 	if !isOwner {
-		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can grant access")
+		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgOnlyChatOwnerCanGrantAccess)
 	}
 
 	err = s.storage.GrantChatAccess(ctx, req.ChatId, req.SessionId)
 	if err != nil {
-		logger.Log.Error("failed to grant chat access:", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to grant chat access: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToGrantChatAccess, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToGrantChatAccess, err),
+		)
 	}
 	return &pb.GrantChatAccessResponse{Status: "access_granted"}, nil
 }
