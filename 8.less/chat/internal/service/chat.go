@@ -112,12 +112,32 @@ func (s *ChatService) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest)
 
 func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest) (*emptypb.Empty, error) {
 	logger.Log.Info("Set ttl", "TtlSeconds", req.TtlSeconds)
-	ttl := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second)
-	err := s.storage.SetChatTTL(ctx, req.ChatId, ttl)
+	sessionID, ok := middleware.GetSessionID(ctx)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+	}
+
+	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
+	if err != nil {
+		var chatErr *customerrors.ChatError
+		if errors.As(err, &chatErr) && errors.Is(chatErr.Err, customerrors.ErrChatNotFound) {
+			logger.Log.Error("Chat not found in service", "ChatId", req.ChatId)
+			return nil, status.Errorf(codes.NotFound, "chat not found in service: %v", err)
+		}
+		logger.Log.Error("Failed to check chat ownership", "error", err)
+		return nil, status.Errorf(codes.Internal, "failed to check chat ownership: %v", err)
+	}
+	if !isOwner {
+		return nil, status.Errorf(codes.PermissionDenied, "only chat owner can set TTL")
+	}
+
+	newTTL := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second)
+	err = s.storage.SetChatTTL(ctx, req.ChatId, newTTL)
 	if err != nil {
 		logger.Log.Error("failed to set chat TTL:", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to set chat TTL: %v", err)
 	}
+	logger.Log.Info("Chat TTL set successfully", "ChatId", req.ChatId, "NewTTL", newTTL)
 	return &emptypb.Empty{}, nil
 }
 
