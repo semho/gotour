@@ -28,4 +28,5 @@ type Storage interface {
 	RequestChatAccess(ctx context.Context, chatID, sessionID string) error
 	GetAccessRequests(ctx context.Context, chatID string) ([]string, error)
 	GrantChatAccess(ctx context.Context, chatID, sessionID string) error
+	HasChatAccess(ctx context.Context, chatID, sessionID string) (bool, error)
 }

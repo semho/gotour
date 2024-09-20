@@ -146,13 +146,11 @@ func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) e
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	//chat, ok := s.chats[chatID]
-	_, ok := s.chats[chatID]
+	chat, ok := s.chats[chatID]
 	if !ok {
 		return storage.ErrChatNotFound
 	}
-	//TODO: тут надо реализовать логику доступа, используя chat, сейчас удалили сессию из запросов на доступ
-	//TODO: а лучше контроль доступа должен быть реализован на уровне сервиса
+	chat.AllowedUsers = append(chat.AllowedUsers, sessionID)
 	requests := s.accessRequests[chatID]
 	for i, id := range requests {
 		if id == sessionID {
@@ -162,4 +160,30 @@ func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) e
 	}
 
 	return nil
+}
+
+func (s *Storage) HasChatAccess(_ context.Context, chatID, sessionID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	chat, ok := s.chats[chatID]
+	if !ok {
+		return false, storage.ErrChatNotFound
+	}
+
+	if !chat.Private {
+		return true, nil
+	}
+
+	if chat.OwnerID == sessionID {
+		return true, nil
+	}
+
+	for _, id := range chat.AllowedUsers {
+		if id == sessionID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

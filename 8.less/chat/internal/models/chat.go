@@ -7,13 +7,14 @@ import (
 )
 
 type Chat struct {
-	ID          string
-	HistorySize int
-	TTL         *time.Time
-	ReadOnly    bool
-	Private     bool
-	OwnerID     string
-	Messages    []Message
+	ID           string
+	HistorySize  int
+	TTL          *time.Time
+	ReadOnly     bool
+	Private      bool
+	OwnerID      string
+	Messages     []Message
+	AllowedUsers []string
 }
 
 func NewChat(historySize int, ttl *time.Time, readOnly, private bool, ownerID string) *Chat {

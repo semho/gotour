@@ -99,15 +99,56 @@ func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest)
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageRequest) (*pb.Message, error) {
-	logger.Log.Info("Send message", "Text", req.Text)
+func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (string, *models.Chat, error) {
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+		logger.Log.Error("Session ID not found in context")
+		return "", nil, status.Errorf(codes.Unauthenticated, "session ID not found in context")
+	}
+
+	_, err := s.storage.GetSession(ctx, sessionID)
+	if err != nil {
+		logger.Log.Error("Failed to get session", "error", err)
+		return "", nil, status.Errorf(codes.Unauthenticated, "invalid session: %v", err)
+	}
+
+	chat, err := s.storage.GetChat(ctx, chatID)
+	if err != nil {
+		logger.Log.Error("Failed to get chat", "error", err)
+		return "", nil, status.Errorf(codes.NotFound, "chat not found: %v", err)
+	}
+
+	if chat.TTL != nil && time.Now().After(*chat.TTL) {
+		return "", nil, status.Errorf(codes.FailedPrecondition, "chat has expired")
+	}
+
+	if chat.Private {
+		hasAccess, err := s.storage.HasChatAccess(ctx, chatID, sessionID)
+		if err != nil {
+			logger.Log.Error("Failed to check chat access", "error", err)
+			return "", nil, status.Errorf(codes.Internal, "failed to check chat access: %v", err)
+		}
+		if !hasAccess {
+			return "", nil, status.Errorf(codes.PermissionDenied, "no access to private chat")
+		}
+	}
+
+	return sessionID, chat, nil
+}
+
+func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageRequest) (*pb.Message, error) {
+	logger.Log.Info("Send message", "Text", req.Text)
+	sessionID, chat, err := s.validateChatAccess(ctx, req.ChatId)
+	if err != nil {
+		return nil, err
+	}
+
+	if chat.ReadOnly && chat.OwnerID != sessionID {
+		return nil, status.Errorf(codes.PermissionDenied, "chat is read-only")
 	}
 
 	message := models.NewMessage(req.ChatId, sessionID, req.Text)
-	err := s.storage.AddMessage(ctx, message)
+	err = s.storage.AddMessage(ctx, message)
 	if err != nil {
 		logger.Log.Error("failed to send messag:", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to send message: %v", err)
@@ -123,11 +164,18 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 
 func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequest) (*pb.ChatHistory, error) {
 	logger.Log.Info("Chat history", "ChatId", req.ChatId)
+
+	_, _, err := s.validateChatAccess(ctx, req.ChatId)
+	if err != nil {
+		return nil, err
+	}
+
 	messages, err := s.storage.GetChatHistory(ctx, req.ChatId)
 	if err != nil {
 		logger.Log.Error("failed to get chat history:", "error", err)
 		return nil, status.Errorf(codes.Internal, "failed to get chat history: %v", err)
 	}
+
 	pbMessages := make([]*pb.Message, len(messages))
 	for i, msg := range messages {
 		pbMessages[i] = &pb.Message{
