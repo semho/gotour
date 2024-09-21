@@ -9,6 +9,7 @@ import (
 type Storage interface {
 	CreateSession(ctx context.Context, session *models.Session) error
 	GetSession(ctx context.Context, sessionID string) (*models.Session, error)
+	GetDefaultHistorySize() int
 
 	CreateChat(ctx context.Context, chat *models.Chat) error
 	GetChat(ctx context.Context, chatID string) (*models.Chat, error)

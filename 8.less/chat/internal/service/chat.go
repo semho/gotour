@@ -79,6 +79,12 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 		t := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second)
 		ttl = &t
 	}
+
+	historySize := int(req.HistorySize)
+	if historySize <= 0 {
+		historySize = s.storage.GetDefaultHistorySize()
+	}
+
 	chat := models.NewChat(int(req.HistorySize), ttl, req.ReadOnly, req.Private, sessionID)
 	err = s.storage.CreateChat(ctx, chat)
 	if err != nil {
@@ -88,7 +94,7 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	}
 	return &pb.Chat{
 		Id:          chat.ID,
-		HistorySize: req.HistorySize,
+		HistorySize: int32(historySize),
 		Ttl:         timestamppb.New(*chat.TTL),
 		ReadOnly:    chat.ReadOnly,
 		Private:     chat.Private,

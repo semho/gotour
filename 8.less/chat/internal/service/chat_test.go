@@ -95,6 +95,11 @@ func (m *MockStorage) GetAndIncrementAnonCount(ctx context.Context, chatID strin
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockStorage) GetDefaultHistorySize() int {
+	args := m.Called()
+	return args.Int(0)
+}
+
 func createContextWithSession(sessionID string) context.Context {
 	md := metadata.New(map[string]string{"session_id": sessionID})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
@@ -169,6 +174,42 @@ func TestCreateChat(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, int32(100), resp.HistorySize)
+	assert.Equal(t, true, resp.Private)
+	assert.Equal(t, false, resp.ReadOnly)
+	assert.NotEmpty(t, resp.Id)
+	assert.Equal(t, sessionID, resp.OwnerId)
+
+	mockStorage.AssertExpectations(t)
+}
+
+func TestCreateChat_DefaultHistorySize(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.CreateChatRequest{
+		HistorySize: 0,
+		TtlSeconds:  3600,
+		ReadOnly:    false,
+		Private:     true,
+	}
+
+	mockSession := &models.Session{
+		ID:       sessionID,
+		Nickname: "TestUser",
+	}
+
+	defaultHistorySize := 1000
+	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
+	mockStorage.On("CreateChat", mock.Anything, mock.AnythingOfType("*models.Chat")).Return(nil)
+	mockStorage.On("GetDefaultHistorySize").Return(defaultHistorySize)
+
+	resp, err := service.CreateChat(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, int32(defaultHistorySize), resp.HistorySize)
 	assert.Equal(t, true, resp.Private)
 	assert.Equal(t, false, resp.ReadOnly)
 	assert.NotEmpty(t, resp.Id)

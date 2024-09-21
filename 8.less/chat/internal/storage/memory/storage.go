@@ -30,6 +30,10 @@ func NewMemoryStorage(maxChatSize, maxChatsCount int) *Storage {
 	}
 }
 
+func (s *Storage) GetDefaultHistorySize() int {
+	return s.maxChatSize
+}
+
 func (s *Storage) GetAndIncrementAnonCount(_ context.Context, chatID string) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
