@@ -436,6 +436,9 @@
         "sessionId": {
           "type": "string"
         },
+        "nickname": {
+          "type": "string"
+        },
         "text": {
           "type": "string"
         },

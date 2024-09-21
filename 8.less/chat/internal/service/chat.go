@@ -6,6 +6,7 @@ import (
 	"chat/pkg/logger"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"chat/internal/models"
@@ -32,8 +33,11 @@ func (s *ChatService) CreateSession(ctx context.Context, req *pb.CreateSessionRe
 	session := models.NewSession(req.Nickname)
 	err := s.storage.CreateSession(ctx, session)
 	if err != nil {
-		logger.Log.Error("Failed to create session", "error", err)
-		return nil, status.Errorf(codes.Internal, "failed to create session: %v", err)
+		logger.Log.Error(customerrors.ErrMsgFailedToCreateSession, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToCreateSession, err),
+		)
 	}
 	logger.Log.Info("Session created", "session_id", session.ID)
 	return &pb.Session{
@@ -220,7 +224,41 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 		return nil, status.Errorf(codes.PermissionDenied, customerrors.ErrMsgChatIsReadOnly)
 	}
 
-	message := models.NewMessage(req.ChatId, sessionID, req.Text)
+	session, err := s.storage.GetSession(ctx, sessionID)
+	if err != nil {
+		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			customerrors.FormatError(customerrors.ErrMsgFailedToGetSession, err),
+		)
+	}
+
+	var nickname string
+	if session.Nickname != "" {
+		nickname = session.Nickname
+	} else {
+		if anonNickname, exists := session.AnonNicknames[req.ChatId]; exists {
+			nickname = anonNickname
+		} else {
+			anonCount, err := s.storage.GetAndIncrementAnonCount(ctx, req.ChatId)
+			if err != nil {
+				logger.Log.Error(customerrors.ErrMsgFailedToGetAnonCount, "error", err)
+				return nil, status.Errorf(
+					codes.Internal,
+					customerrors.FormatError(customerrors.ErrMsgFailedToGetAnonCount, err),
+				)
+			}
+			nickname = fmt.Sprintf("Аноним #%d", anonCount)
+			session.AnonNicknames[req.ChatId] = nickname
+		}
+	}
+
+	message := models.NewMessage(req.ChatId, sessionID, nickname, req.Text)
+	if message.ChatID != req.ChatId {
+		logger.Log.Error("Mismatch in ChatId", "RequestChatId", req.ChatId, "MessageChatId", message.ChatID)
+		return nil, status.Errorf(codes.Internal, "Internal error: ChatId mismatch")
+	}
+
 	err = s.storage.AddMessage(ctx, message)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgFailedToSendMessage, "error", err)
@@ -230,6 +268,7 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 		Id:        message.ID,
 		ChatId:    message.ChatID,
 		SessionId: message.SessionID,
+		Nickname:  message.Nickname,
 		Text:      message.Text,
 		Timestamp: timestamppb.New(message.Timestamp),
 	}, nil
@@ -258,6 +297,7 @@ func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistory
 			Id:        msg.ID,
 			ChatId:    msg.ChatID,
 			SessionId: msg.SessionID,
+			Nickname:  msg.Nickname,
 			Text:      msg.Text,
 			Timestamp: timestamppb.New(msg.Timestamp),
 		}

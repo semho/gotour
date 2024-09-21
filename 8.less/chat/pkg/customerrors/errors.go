@@ -16,6 +16,7 @@ var (
 const (
 	ErrMsgSessionNotFound                    = "session ID not found in context"
 	ErrMsgInvalidSession                     = "invalid session"
+	ErrMsgFailedToCreateSession              = "failed to create session"
 	ErrMsgFailedToGetSession                 = "failed to get session info"
 	ErrMsgChatNotFoundService                = "Chat not found in service"
 	ErrMsgFailedToCreateChat                 = "failed to create chat"
@@ -36,6 +37,7 @@ const (
 	ErrMsgOnlyChatOwnerCanGrantAccess        = "only chat owner can grant access"
 	ErrMsgFailedToGetAccessRequests          = "failed to get access requests"
 	ErrMsgFailedToGrantChatAccess            = "failed to grant chat access"
+	ErrMsgFailedToGetAnonCount               = "failed to get or increment anonymous user count"
 )
 
 func FormatError(baseMsg string, err error) string {

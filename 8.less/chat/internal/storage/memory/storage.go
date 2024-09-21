@@ -13,6 +13,7 @@ type Storage struct {
 	sessions       map[string]*models.Session
 	chats          map[string]*models.Chat
 	accessRequests map[string][]string
+	anonCounts     map[string]int
 	mu             sync.RWMutex
 	maxChatSize    int
 	maxChatsCount  int
@@ -23,9 +24,23 @@ func NewMemoryStorage(maxChatSize, maxChatsCount int) *Storage {
 		sessions:       make(map[string]*models.Session),
 		chats:          make(map[string]*models.Chat),
 		accessRequests: make(map[string][]string),
+		anonCounts:     make(map[string]int),
 		maxChatSize:    maxChatSize,
 		maxChatsCount:  maxChatsCount,
 	}
+}
+
+func (s *Storage) GetAndIncrementAnonCount(_ context.Context, chatID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count, exists := s.anonCounts[chatID]
+	if !exists {
+		count = 0
+	}
+	count++
+	s.anonCounts[chatID] = count
+	return count, nil
 }
 
 func (s *Storage) CreateSession(_ context.Context, session *models.Session) error {

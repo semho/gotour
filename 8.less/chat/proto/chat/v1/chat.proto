@@ -130,8 +130,9 @@ message Message {
   string id = 1;
   string chat_id = 2;
   string session_id = 3;
-  string text = 4;
-  google.protobuf.Timestamp timestamp = 5;
+  string nickname = 4;
+  string text = 5;
+  google.protobuf.Timestamp timestamp = 6;
 }
 
 message SendMessageRequest {

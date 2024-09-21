@@ -725,6 +725,8 @@ func (m *Message) validate(all bool) error {
 
 	// no validation rules for SessionId
 
+	// no validation rules for Nickname
+
 	// no validation rules for Text
 
 	if all {
