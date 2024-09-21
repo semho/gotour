@@ -370,7 +370,6 @@ func TestGetChatHistory(t *testing.T) {
 
 	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
 	mockStorage.On("GetChat", mock.Anything, chatID).Return(mockChat, nil)
-	// Удалим ожидание вызова HasChatAccess, так как оно не используется для публичных чатов
 	mockStorage.On("GetChatHistory", mock.Anything, chatID).Return(mockMessages, nil)
 
 	resp, err := service.GetChatHistory(ctx, req)
