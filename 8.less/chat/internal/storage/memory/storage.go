@@ -202,7 +202,7 @@ func (s *Storage) GrantChatAccess(_ context.Context, chatID, sessionID string) e
 	return nil
 }
 
-func (s *Storage) HasChatAccess(ctx context.Context, chatID, sessionID string) (bool, error) {
+func (s *Storage) HasChatAccess(_ context.Context, chatID, sessionID string) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

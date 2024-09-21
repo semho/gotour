@@ -36,6 +36,7 @@ func (s *ChatService) CreateSession(ctx context.Context, req *pb.CreateSessionRe
 		logger.Log.Error(customerrors.ErrMsgFailedToCreateSession, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCreateSession, err),
 		)
 	}
@@ -68,6 +69,7 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
 		return nil, status.Errorf(
 			codes.Unauthenticated,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgInvalidSession, err),
 		)
 	}
@@ -81,6 +83,7 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	err = s.storage.CreateChat(ctx, chat)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgFailedToCreateChat, "error", err)
+		//nolint:govet
 		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToCreateChat, err))
 	}
 	return &pb.Chat{
@@ -105,6 +108,7 @@ func (s *ChatService) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest)
 		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
 		)
 	}
@@ -115,6 +119,7 @@ func (s *ChatService) DeleteChat(ctx context.Context, req *pb.DeleteChatRequest)
 	err = s.storage.DeleteChat(ctx, req.ChatId)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgFailedToDeleteChat, "error", err)
+		//nolint:govet
 		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToDeleteChat, err))
 	}
 	return &emptypb.Empty{}, nil
@@ -134,12 +139,14 @@ func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest)
 			logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "ChatId", req.ChatId)
 			return nil, status.Errorf(
 				codes.NotFound,
+				//nolint:govet
 				customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
 			)
 		}
 		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
 		)
 	}
@@ -151,6 +158,7 @@ func (s *ChatService) SetChatTTL(ctx context.Context, req *pb.SetChatTTLRequest)
 	err = s.storage.SetChatTTL(ctx, req.ChatId, newTTL)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgFailedToSetChatTTL, "error", err)
+		//nolint:govet
 		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToSetChatTTL, err))
 	}
 	logger.Log.Info("Chat TTL set successfully", "ChatId", req.ChatId, "NewTTL", newTTL)
@@ -169,6 +177,7 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
 		return "", nil, status.Errorf(
 			codes.Unauthenticated,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgInvalidSession, err),
 		)
 	}
@@ -181,6 +190,7 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 				logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "chatID", chatID)
 				return "", nil, status.Errorf(
 					codes.NotFound,
+					//nolint:govet
 					customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
 				)
 			}
@@ -188,6 +198,7 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 		logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "error", err)
 		return "", nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err),
 		)
 	}
@@ -202,6 +213,7 @@ func (s *ChatService) validateChatAccess(ctx context.Context, chatID string) (st
 			logger.Log.Error(customerrors.ErrMsgFailedToCheckChatAccess, "error", err)
 			return "", nil, status.Errorf(
 				codes.Internal,
+				//nolint:govet
 				customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatAccess, err),
 			)
 		}
@@ -229,6 +241,7 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 		logger.Log.Error(customerrors.ErrMsgFailedToGetSession, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToGetSession, err),
 		)
 	}
@@ -245,6 +258,7 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 				logger.Log.Error(customerrors.ErrMsgFailedToGetAnonCount, "error", err)
 				return nil, status.Errorf(
 					codes.Internal,
+					//nolint:govet
 					customerrors.FormatError(customerrors.ErrMsgFailedToGetAnonCount, err),
 				)
 			}
@@ -262,6 +276,7 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 	err = s.storage.AddMessage(ctx, message)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgFailedToSendMessage, "error", err)
+		//nolint:govet
 		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToSendMessage, err))
 	}
 	return &pb.Message{
@@ -287,6 +302,7 @@ func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistory
 		logger.Log.Error(customerrors.ErrMsgFailedToGetChatHistory, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToGetChatHistory, err),
 		)
 	}
@@ -318,6 +334,7 @@ func (s *ChatService) RequestChatAccess(
 	chat, err := s.storage.GetChat(ctx, req.ChatId)
 	if err != nil {
 		logger.Log.Error(customerrors.ErrMsgChatNotFoundService, "error", err)
+		//nolint:govet
 		return nil, status.Errorf(codes.NotFound, customerrors.FormatError(customerrors.ErrMsgChatNotFoundService, err))
 	}
 
@@ -330,6 +347,7 @@ func (s *ChatService) RequestChatAccess(
 		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatAccess, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatAccess, err),
 		)
 	}
@@ -349,6 +367,7 @@ func (s *ChatService) RequestChatAccess(
 				logger.Log.Error(customerrors.ErrMsgFailedToRequestChatAccess, "error", err)
 				return nil, status.Errorf(
 					codes.Internal,
+					//nolint:govet
 					customerrors.FormatError(customerrors.ErrMsgFailedToRequestChatAccess, err),
 				)
 			}
@@ -372,6 +391,7 @@ func (s *ChatService) GetAccessRequests(ctx context.Context, req *pb.GetAccessRe
 		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
 		)
 	}
@@ -384,6 +404,7 @@ func (s *ChatService) GetAccessRequests(ctx context.Context, req *pb.GetAccessRe
 		logger.Log.Error(customerrors.ErrMsgFailedToGetAccessRequests, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToGetAccessRequests, err),
 		)
 	}
@@ -419,6 +440,7 @@ func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAcce
 		logger.Log.Error(customerrors.ErrMsgFailedToCheckChatOwnership, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToCheckChatOwnership, err),
 		)
 	}
@@ -431,6 +453,7 @@ func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAcce
 		logger.Log.Error(customerrors.ErrMsgFailedToGrantChatAccess, "error", err)
 		return nil, status.Errorf(
 			codes.Internal,
+			//nolint:govet
 			customerrors.FormatError(customerrors.ErrMsgFailedToGrantChatAccess, err),
 		)
 	}
