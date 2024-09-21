@@ -15,14 +15,17 @@ func MetricsInterceptor(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	start := time.Now()
+	//Rate
 	metrics.RequestsTotal.WithLabelValues(info.FullMethod).Inc()
 
 	resp, err := handler(ctx, req)
 
 	duration := time.Since(start).Seconds()
+	//Duration
 	metrics.RequestDuration.WithLabelValues(info.FullMethod).Observe(duration)
 
 	if err != nil {
+		//Errors
 		metrics.ErrorsTotal.WithLabelValues(info.FullMethod).Inc()
 	}
 
