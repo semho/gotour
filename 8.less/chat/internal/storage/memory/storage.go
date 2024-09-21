@@ -177,7 +177,7 @@ func (s *Storage) GetAccessRequests(_ context.Context, chatID string) ([]string,
 
 	requests, ok := s.accessRequests[chatID]
 	if !ok {
-		return nil, customerrors.NewChatError(chatID, customerrors.ErrChatNotFound)
+		return nil, customerrors.NewChatError(chatID, customerrors.ErrChatNotFoundRequests)
 	}
 	return requests, nil
 }

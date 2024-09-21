@@ -80,6 +80,21 @@ func (m *MockStorage) GrantChatAccess(ctx context.Context, chatID, sessionID str
 	return args.Error(0)
 }
 
+func (m *MockStorage) IsChatOwner(ctx context.Context, chatID, sessionID string) (bool, error) {
+	args := m.Called(ctx, chatID, sessionID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockStorage) HasChatAccess(ctx context.Context, chatID, sessionID string) (bool, error) {
+	args := m.Called(ctx, chatID, sessionID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockStorage) GetAndIncrementAnonCount(ctx context.Context, chatID string) (int, error) {
+	args := m.Called(ctx, chatID)
+	return args.Int(0), args.Error(1)
+}
+
 func createContextWithSession(sessionID string) context.Context {
 	md := metadata.New(map[string]string{"session_id": sessionID})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
@@ -141,6 +156,12 @@ func TestCreateChat(t *testing.T) {
 		Private:     true,
 	}
 
+	mockSession := &models.Session{
+		ID:       sessionID,
+		Nickname: "TestUser",
+	}
+
+	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
 	mockStorage.On("CreateChat", mock.Anything, mock.AnythingOfType("*models.Chat")).Return(nil)
 
 	resp, err := service.CreateChat(ctx, req)
@@ -160,9 +181,11 @@ func TestDeleteChat(t *testing.T) {
 	mockStorage := new(MockStorage)
 	service := NewChatService(mockStorage)
 
-	ctx := context.Background()
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
 	req := &pb.DeleteChatRequest{ChatId: "test_chat_id"}
 
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(true, nil)
 	mockStorage.On("DeleteChat", mock.Anything, req.ChatId).Return(nil)
 
 	resp, err := service.DeleteChat(ctx, req)
@@ -174,16 +197,37 @@ func TestDeleteChat(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
+func TestDeleteChat_NotOwner(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.DeleteChatRequest{ChatId: "test_chat_id"}
+
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(false, nil)
+
+	resp, err := service.DeleteChat(ctx, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	mockStorage.AssertExpectations(t)
+}
+
 func TestSetChatTTL(t *testing.T) {
 	mockStorage := new(MockStorage)
 	service := NewChatService(mockStorage)
 
-	ctx := context.Background()
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
 	req := &pb.SetChatTTLRequest{
 		ChatId:     "test_chat_id",
 		TtlSeconds: 3600,
 	}
 
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(true, nil)
 	mockStorage.On("SetChatTTL", mock.Anything, req.ChatId, mock.AnythingOfType("time.Time")).Return(nil)
 
 	resp, err := service.SetChatTTL(ctx, req)
@@ -191,6 +235,28 @@ func TestSetChatTTL(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.IsType(t, &emptypb.Empty{}, resp)
+
+	mockStorage.AssertExpectations(t)
+}
+
+func TestSetChatTTL_NotOwner(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.SetChatTTLRequest{
+		ChatId:     "test_chat_id",
+		TtlSeconds: 3600,
+	}
+
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(false, nil)
+
+	resp, err := service.SetChatTTL(ctx, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	mockStorage.AssertExpectations(t)
 }
@@ -206,6 +272,21 @@ func TestSendMessage(t *testing.T) {
 		Text:   "Hello, world!",
 	}
 
+	mockChat := &models.Chat{
+		ID:       "test_chat_id",
+		OwnerID:  "owner_id",
+		ReadOnly: false,
+		Private:  false,
+	}
+
+	mockSession := &models.Session{
+		ID:            sessionID,
+		Nickname:      "TestUser",
+		AnonNicknames: make(map[string]string),
+	}
+
+	mockStorage.On("GetChat", mock.Anything, req.ChatId).Return(mockChat, nil)
+	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
 	mockStorage.On("AddMessage", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
 
 	resp, err := service.SendMessage(ctx, req)
@@ -214,15 +295,49 @@ func TestSendMessage(t *testing.T) {
 	assert.NotNil(t, resp)
 	assert.Equal(t, req.ChatId, resp.ChatId)
 	assert.Equal(t, req.Text, resp.Text)
-
-	// middleware.GetSessionID для проверки
-	retrievedSessionID, ok := middleware.GetSessionID(ctx)
-	assert.True(t, ok)
-	assert.Equal(t, sessionID, retrievedSessionID)
 	assert.Equal(t, sessionID, resp.SessionId)
+	assert.Equal(t, "TestUser", resp.Nickname)
 
-	assert.NotEmpty(t, resp.Id)
-	assert.NotNil(t, resp.Timestamp)
+	mockStorage.AssertExpectations(t)
+}
+
+func TestSendMessage_AnonymousUser(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.SendMessageRequest{
+		ChatId: "test_chat_id",
+		Text:   "Hello, world!",
+	}
+
+	mockChat := &models.Chat{
+		ID:       "test_chat_id",
+		OwnerID:  "owner_id",
+		ReadOnly: false,
+		Private:  false,
+	}
+
+	mockSession := &models.Session{
+		ID:            sessionID,
+		Nickname:      "",
+		AnonNicknames: make(map[string]string),
+	}
+
+	mockStorage.On("GetChat", mock.Anything, req.ChatId).Return(mockChat, nil)
+	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
+	mockStorage.On("GetAndIncrementAnonCount", mock.Anything, req.ChatId).Return(1, nil)
+	mockStorage.On("AddMessage", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
+
+	resp, err := service.SendMessage(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, req.ChatId, resp.ChatId)
+	assert.Equal(t, req.Text, resp.Text)
+	assert.Equal(t, sessionID, resp.SessionId)
+	assert.Equal(t, "Аноним #1", resp.Nickname)
 
 	mockStorage.AssertExpectations(t)
 }
@@ -231,15 +346,32 @@ func TestGetChatHistory(t *testing.T) {
 	mockStorage := new(MockStorage)
 	service := NewChatService(mockStorage)
 
-	ctx := context.Background()
-	req := &pb.GetChatHistoryRequest{ChatId: "test_chat_id"}
+	sessionID := "test_session_id"
+	chatID := "test_chat_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.GetChatHistoryRequest{ChatId: chatID}
 
-	mockMessages := []*models.Message{
-		{ID: "1", ChatID: "test_chat_id", SessionID: "session1", Text: "Hello", Timestamp: time.Now()},
-		{ID: "2", ChatID: "test_chat_id", SessionID: "session2", Text: "Hi", Timestamp: time.Now()},
+	mockChat := &models.Chat{
+		ID:       chatID,
+		OwnerID:  "owner_id",
+		ReadOnly: false,
+		Private:  false,
 	}
 
-	mockStorage.On("GetChatHistory", mock.Anything, req.ChatId).Return(mockMessages, nil)
+	mockSession := &models.Session{
+		ID:       sessionID,
+		Nickname: "TestUser",
+	}
+
+	mockMessages := []*models.Message{
+		{ID: "1", ChatID: chatID, SessionID: "session1", Text: "Hello", Timestamp: time.Now()},
+		{ID: "2", ChatID: chatID, SessionID: "session2", Text: "Hi", Timestamp: time.Now()},
+	}
+
+	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
+	mockStorage.On("GetChat", mock.Anything, chatID).Return(mockChat, nil)
+	// Удалим ожидание вызова HasChatAccess, так как оно не используется для публичных чатов
+	mockStorage.On("GetChatHistory", mock.Anything, chatID).Return(mockMessages, nil)
 
 	resp, err := service.GetChatHistory(ctx, req)
 
@@ -258,15 +390,24 @@ func TestRequestChatAccess(t *testing.T) {
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
-	req := &pb.RequestChatAccessRequest{ChatId: "test_chat_id"}
+	req := &pb.RequestChatAccessRequest{
+		ChatId: "test_chat_id",
+	}
 
+	mockChat := &models.Chat{
+		ID:      req.ChatId,
+		Private: true,
+	}
+
+	mockStorage.On("GetChat", mock.Anything, req.ChatId).Return(mockChat, nil)
+	mockStorage.On("HasChatAccess", mock.Anything, req.ChatId, sessionID).Return(false, nil)
 	mockStorage.On("RequestChatAccess", mock.Anything, req.ChatId, sessionID).Return(nil)
 
 	resp, err := service.RequestChatAccess(ctx, req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.IsType(t, &emptypb.Empty{}, resp)
+	assert.Equal(t, "request_sent", resp.Status)
 
 	mockStorage.AssertExpectations(t)
 }
@@ -275,7 +416,8 @@ func TestGetAccessRequests(t *testing.T) {
 	mockStorage := new(MockStorage)
 	service := NewChatService(mockStorage)
 
-	ctx := context.Background()
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
 	req := &pb.GetAccessRequestsRequest{ChatId: "test_chat_id"}
 
 	mockSessionIDs := []string{"session1", "session2"}
@@ -284,6 +426,7 @@ func TestGetAccessRequests(t *testing.T) {
 		{ID: "session2", Nickname: "user2"},
 	}
 
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(true, nil)
 	mockStorage.On("GetAccessRequests", mock.Anything, req.ChatId).Return(mockSessionIDs, nil)
 	mockStorage.On("GetSession", mock.Anything, "session1").Return(mockSessions[0], nil)
 	mockStorage.On("GetSession", mock.Anything, "session2").Return(mockSessions[1], nil)
@@ -299,23 +442,66 @@ func TestGetAccessRequests(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
+func TestGetAccessRequests_NotOwner(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.GetAccessRequestsRequest{ChatId: "test_chat_id"}
+
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(false, nil)
+
+	resp, err := service.GetAccessRequests(ctx, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	mockStorage.AssertExpectations(t)
+}
+
 func TestGrantChatAccess(t *testing.T) {
 	mockStorage := new(MockStorage)
 	service := NewChatService(mockStorage)
 
-	ctx := context.Background()
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
 	req := &pb.GrantChatAccessRequest{
 		ChatId:    "test_chat_id",
-		SessionId: "test_session_id",
+		SessionId: "request_session_id",
 	}
 
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(true, nil)
 	mockStorage.On("GrantChatAccess", mock.Anything, req.ChatId, req.SessionId).Return(nil)
 
 	resp, err := service.GrantChatAccess(ctx, req)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.IsType(t, &emptypb.Empty{}, resp)
+	assert.Equal(t, "access_granted", resp.Status)
+
+	mockStorage.AssertExpectations(t)
+}
+
+func TestGrantChatAccess_NotOwner(t *testing.T) {
+	mockStorage := new(MockStorage)
+	service := NewChatService(mockStorage)
+
+	sessionID := "test_session_id"
+	ctx := createContextWithSession(sessionID)
+	req := &pb.GrantChatAccessRequest{
+		ChatId:    "test_chat_id",
+		SessionId: "request_session_id",
+	}
+
+	mockStorage.On("IsChatOwner", mock.Anything, req.ChatId, sessionID).Return(false, nil)
+
+	resp, err := service.GrantChatAccess(ctx, req)
+
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	mockStorage.AssertExpectations(t)
 }

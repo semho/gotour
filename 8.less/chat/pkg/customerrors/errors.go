@@ -8,6 +8,7 @@ import (
 var (
 	ErrSessionNotFound        = errors.New("session not found")
 	ErrChatNotFound           = errors.New("chat not found")
+	ErrChatNotFoundRequests   = errors.New("there are no requests for this chat")
 	ErrMaxNumberReached       = errors.New("maximum number of chats reached")
 	ErrAccessAlreadyExist     = errors.New("access already exists")
 	ErrAccessAlreadyRequested = errors.New("access already requested")
