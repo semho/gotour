@@ -43,7 +43,7 @@
      * Пример: 95% запросов обрабатываются менее чем за 200 мс.
 3. Протокол HTTP. HTTP 1.1 / HTTP 2 / HTTP 3 (QUIC). OpenAPI спецификация    
    https://sidharth-padhee.medium.com/http-1-1-vs-2-vs-3-quic-b9e80748625f      
-   https://translated.turbopages.org/proxy_u/en-ru.ru.39e36427-66d691d2-df7d7e88-74722d776562/https/www.baeldung.com/cs/http-versions      
+   https://www.baeldung.com/cs/http-versions
    https://mikeralphson.github.io/OpenAPI-Specification/oas/latest.html   
    https://habr.com/ru/companies/ozontech/articles/825008/
    
