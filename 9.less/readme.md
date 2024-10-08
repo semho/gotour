@@ -54,8 +54,8 @@
 Как правило, 2PC используется для мгновенных транзакций, например в одной сети, а Saga — для длительных, например с участием внешних систем.
 
 
-5. Индексы. Типы индексов в PostgreSQL
-   https://habr.com/ru/companies/ruvds/articles/724066/
+5. Индексы. Типы индексов в PostgreSQL   
+   https://habr.com/ru/companies/ruvds/articles/724066/    
    https://selectel.ru/blog/tutorials/indexes-in-postgresql-and-create-index/?ysclid=m20qpsx2zs438827374   
    https://habr.com/ru/companies/otus/articles/747882/   
 
