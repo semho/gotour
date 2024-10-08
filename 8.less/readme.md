@@ -3,7 +3,9 @@
    https://www.atlassian.com/ru/incident-management/kpis/sla-vs-slo-vs-sli
    https://etogeek.dev/posts/sli-slo-sla/
    https://teletype.in/@flow_russian/6fZTECzIinx
-   https://habr.com/ru/companies/otus/articles/676342/  
+   https://habr.com/ru/companies/otus/articles/676342/
+   https://sre.google/sre-book/table-of-contents/
+   https://sre.google/workbook/table-of-contents/
    Показатели SLO для API:
    * Доступность (Availability):
      * Процент времени, когда API доступен и отвечает на запросы.
@@ -26,7 +28,7 @@
    * Успешность обновлений (Deployment Success Rate):
      * Процент успешных развертываний новых версий API.
      * Пример: "99% развертываний должны быть успешными без влияния на пользователей".
-2. RED-метрики.
+3. RED-метрики.
    https://habr.com/ru/companies/otus/articles/514916/
    * Rate (Частота):
      * Это количество запросов, обрабатываемых сервисом за единицу времени.
@@ -41,18 +43,18 @@
      * Обычно измеряется в миллисекундах.
      * Важно отслеживать не только среднее время, но и перцентили (например, 95-й, 99-й).
      * Пример: 95% запросов обрабатываются менее чем за 200 мс.
-3. Протокол HTTP. HTTP 1.1 / HTTP 2 / HTTP 3 (QUIC). OpenAPI спецификация    
+4. Протокол HTTP. HTTP 1.1 / HTTP 2 / HTTP 3 (QUIC). OpenAPI спецификация    
    https://sidharth-padhee.medium.com/http-1-1-vs-2-vs-3-quic-b9e80748625f      
-   https://translated.turbopages.org/proxy_u/en-ru.ru.39e36427-66d691d2-df7d7e88-74722d776562/https/www.baeldung.com/cs/http-versions      
+   https://www.baeldung.com/cs/http-versions
    https://mikeralphson.github.io/OpenAPI-Specification/oas/latest.html   
    https://habr.com/ru/companies/ozontech/articles/825008/
    
-4. Протокол gRPC. Protobuf. gRPC Gateway   
+5. Протокол gRPC. Protobuf. gRPC Gateway   
    https://habr.com/ru/companies/otus/articles/780720/  
    https://protobuf.dev/getting-started/gotutorial/   
    https://habr.com/ru/articles/658769/   
    https://earthly.dev/blog/golang-grpc-gateway/      
-5. Авторизация и аутентификация. JWT.
+6. Авторизация и аутентификация. JWT.
    https://dekh.medium.com/the-complete-guide-to-json-web-tokens-jwt-and-token-based-authentication-32501cb5125c   
    https://zhashkevych.medium.com/jwt-%D0%B0%D0%B2%D1%82%D0%BE%D1%80%D0%B8%D0%B7%D0%B0%D1%86%D0%B8%D1%8F-%D0%B4%D0%BB%D1%8F-%D0%B2%D0%B0%D1%88%D0%B5%D0%B3%D0%BE-api-%D0%BD%D0%B0-go-80325de8691b   
    https://ru.hexlet.io/courses/go-web-development/lessons/auth/theory_unit
