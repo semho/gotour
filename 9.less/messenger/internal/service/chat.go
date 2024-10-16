@@ -1,22 +1,28 @@
 package service
 
 import (
+	"errors"
 	"messenger/internal/model"
-	"messenger/internal/storage/memory"
+	"messenger/internal/storage"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type ChatService struct {
-	storage *memory.DB
+	storage  storage.Storage
+	maxChats int
 }
 
-func NewChatService(storage *memory.DB) *ChatService {
-	return &ChatService{storage: storage}
+func NewChatService(storage storage.Storage, maxChats int) *ChatService {
+	return &ChatService{storage: storage, maxChats: maxChats}
 }
 
 func (s *ChatService) CreateChat(chatType model.ChatType, participantIDs []uuid.UUID) (*model.Chat, error) {
+	if s.storage.GetChatCount() >= s.maxChats {
+		return nil, errors.New("maximum number of chats reached")
+	}
+
 	chat := &model.Chat{
 		ID:           uuid.New(),
 		Type:         chatType,

@@ -17,10 +17,14 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 }
 
 func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/users":
+	case r.Method == http.MethodPost && path == "/users":
 		h.CreateUser(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/users/"):
+	case r.Method == http.MethodGet && path == "/users":
+		h.GetAllUsers(w)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/users/"):
 		h.GetUser(w, r)
 	default:
 		http.NotFound(w, r)
@@ -47,8 +51,19 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(user)
 }
 
+func (h *UserHandler) GetAllUsers(w http.ResponseWriter) {
+	users, err := h.userService.GetAllUsers()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/users/")
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	id := strings.TrimPrefix(path, "/users/")
 	userID, err := uuid.Parse(id)
 	if err != nil {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)

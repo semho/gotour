@@ -1,0 +1,10 @@
+{
+  "server": {
+    "port": "8080"
+  },
+  "storage": {
+    "max_users": 1000,
+    "max_messages": 10000,
+    "max_chats": 500
+  }
+}

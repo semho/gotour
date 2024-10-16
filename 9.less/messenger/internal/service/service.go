@@ -1,7 +1,8 @@
 package service
 
 import (
-	"messenger/internal/storage/memory"
+	"messenger/internal/config"
+	"messenger/internal/storage"
 )
 
 type Services struct {
@@ -10,10 +11,10 @@ type Services struct {
 	Chat    *ChatService
 }
 
-func NewServices(db *memory.DB) *Services {
+func NewServices(store storage.Storage, cfg *config.Config) *Services {
 	return &Services{
-		User:    NewUserService(db),
-		Message: NewMessageService(db),
-		Chat:    NewChatService(db),
+		User:    NewUserService(store, cfg.Storage.MaxUsers),
+		Message: NewMessageService(store, cfg.Storage.MaxMessages),
+		Chat:    NewChatService(store, cfg.Storage.MaxMessages),
 	}
 }

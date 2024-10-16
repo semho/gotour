@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 type Config struct {
@@ -17,7 +18,13 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	file, err := os.Open("config.json")
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	configPath := filepath.Join(wd, "config.json")
+
+	file, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
 	}

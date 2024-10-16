@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"log"
 	"messenger/internal/config"
 	"messenger/internal/handler"
 	"messenger/internal/service"
@@ -17,9 +19,9 @@ type App struct {
 }
 
 func New(cfg *config.Config) (*App, error) {
-	db := memory.NewDB()
+	db := memory.NewDB(cfg.Storage.MaxUsers, cfg.Storage.MaxMessages, cfg.Storage.MaxChats)
 
-	services := service.NewServices(db)
+	services := service.NewServices(db, cfg)
 	handlers := handler.NewHandlers(services)
 
 	mux := http.NewServeMux()
@@ -39,8 +41,11 @@ func New(cfg *config.Config) (*App, error) {
 }
 
 func (a *App) Run() error {
+	addr := fmt.Sprintf(":%s", a.cfg.Server.Port)
+	log.Printf("Starting server on %s", addr)
+
 	server := &http.Server{
-		Addr:    ":" + a.cfg.Server.Port,
+		Addr:    addr,
 		Handler: a.mux,
 	}
 	return server.ListenAndServe()

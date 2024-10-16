@@ -4,21 +4,26 @@ import (
 	"errors"
 	"log"
 	"messenger/internal/model"
-	"messenger/internal/storage/memory"
+	"messenger/internal/storage"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type MessageService struct {
-	storage *memory.DB
+	storage     storage.Storage
+	maxMessages int
 }
 
-func NewMessageService(storage *memory.DB) *MessageService {
-	return &MessageService{storage: storage}
+func NewMessageService(storage storage.Storage, maxMessages int) *MessageService {
+	return &MessageService{storage: storage, maxMessages: maxMessages}
 }
 
 func (s *MessageService) SendMessage(senderID, receiverID, chatID uuid.UUID, text string) (*model.Message, error) {
+	if s.storage.GetMessageCount() >= s.maxMessages {
+		return nil, errors.New("maximum number of messages reached")
+	}
+
 	chat, err := s.storage.GetChat(chatID)
 	if err != nil {
 		return nil, err
