@@ -41,8 +41,9 @@ func New(cfg *config.Config) (*App, error) {
 }
 
 func (a *App) Run() error {
+	host := fmt.Sprintf("%s", a.cfg.Server.Host)
 	addr := fmt.Sprintf(":%s", a.cfg.Server.Port)
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Starting server on %s%s", host, addr)
 
 	server := &http.Server{
 		Addr:    addr,

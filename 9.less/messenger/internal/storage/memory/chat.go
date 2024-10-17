@@ -98,7 +98,7 @@ func (db *DB) GetChatMessages(chatID uuid.UUID) ([]*model.Message, error) {
 		return nil, errors.New("chat not found")
 	}
 
-	var chatMessages []*model.Message
+	chatMessages := make([]*model.Message, 0)
 	for _, message := range db.messages {
 		if message.ChatID == chatID {
 			chatMessages = append(chatMessages, message)
@@ -106,4 +106,16 @@ func (db *DB) GetChatMessages(chatID uuid.UUID) ([]*model.Message, error) {
 	}
 
 	return chatMessages, nil
+}
+
+func (db *DB) GetAllChats() ([]*model.Chat, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	chats := make([]*model.Chat, 0, len(db.chats))
+	for _, chat := range db.chats {
+		chats = append(chats, chat)
+	}
+
+	return chats, nil
 }

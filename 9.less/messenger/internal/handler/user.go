@@ -24,7 +24,7 @@ func (h *UserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.CreateUser(w, r)
 	case r.Method == http.MethodGet && path == "/users":
 		h.GetAllUsers(w)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/users/"):
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/users/id="):
 		h.GetUser(w, r)
 	default:
 		http.NotFound(w, r)
@@ -63,8 +63,8 @@ func (h *UserHandler) GetAllUsers(w http.ResponseWriter) {
 
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
-	id := strings.TrimPrefix(path, "/users/")
-	userID, err := uuid.Parse(id)
+	onlyUuid := strings.TrimPrefix(path, "/users/id=")
+	userID, err := uuid.Parse(onlyUuid)
 	if err != nil {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return

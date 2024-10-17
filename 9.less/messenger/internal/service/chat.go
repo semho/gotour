@@ -47,3 +47,7 @@ func (s *ChatService) RemoveUserFromChat(chatID, userID uuid.UUID) error {
 func (s *ChatService) GetChatMessages(chatID uuid.UUID) ([]*model.Message, error) {
 	return s.storage.GetChatMessages(chatID)
 }
+
+func (s *ChatService) GetAllChats() ([]*model.Chat, error) {
+	return s.storage.GetAllChats()
+}

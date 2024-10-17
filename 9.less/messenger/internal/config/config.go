@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	Server struct {
+		Host string `json:"host"`
 		Port string `json:"port"`
 	} `json:"server"`
 	Storage struct {
