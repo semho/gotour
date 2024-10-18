@@ -74,3 +74,7 @@ func (s *MessageService) GetMessage(id, requestingUserID uuid.UUID) (*model.Mess
 
 	return message, nil
 }
+
+func (s *MessageService) GetAllMessages() ([]*model.Message, error) {
+	return s.storage.GetAllMessages()
+}

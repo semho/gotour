@@ -17,6 +17,7 @@ type Storage interface {
 	SendMessage(message *model.Message) (*model.Message, error)
 	GetMessage(id uuid.UUID) (*model.Message, error)
 	UpdateMessageStatus(id uuid.UUID, status model.MessageStatus) error
+	GetAllMessages() ([]*model.Message, error)
 
 	// Chat
 	GetChatCount() int

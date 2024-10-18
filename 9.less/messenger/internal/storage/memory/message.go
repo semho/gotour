@@ -65,3 +65,15 @@ func (db *DB) UpdateMessageStatus(id uuid.UUID, status model.MessageStatus) erro
 	message.Status = status
 	return nil
 }
+
+func (db *DB) GetAllMessages() ([]*model.Message, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	messages := make([]*model.Message, 0, len(db.messages))
+	for _, message := range db.messages {
+		messages = append(messages, message)
+	}
+
+	return messages, nil
+}

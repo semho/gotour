@@ -29,6 +29,8 @@ func New(cfg *config.Config) (*App, error) {
 	mux.Handle("/users/", handlers.User)
 	mux.Handle("/chats", handlers.Chat)
 	mux.Handle("/chats/", handlers.Chat)
+	mux.Handle("/messages", handlers.Message)
+	mux.Handle("/messages/", handlers.Message)
 	// другие маршруты
 
 	return &App{
