@@ -25,13 +25,10 @@ func New(cfg *config.Config) (*App, error) {
 	handlers := handler.NewHandlers(services)
 
 	mux := http.NewServeMux()
-	mux.Handle("/users", handlers.User)
-	mux.Handle("/users/", handlers.User)
-	mux.Handle("/chats", handlers.Chat)
-	mux.Handle("/chats/", handlers.Chat)
-	mux.Handle("/messages", handlers.Message)
-	mux.Handle("/messages/", handlers.Message)
-	// другие маршруты
+	// Регистрация маршрутов
+	handlers.User.RegisterRoutes(mux)
+	handlers.Chat.RegisterRoutes(mux)
+	handlers.Message.RegisterRoutes(mux)
 
 	return &App{
 		cfg:      cfg,

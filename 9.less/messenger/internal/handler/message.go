@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"github.com/google/uuid"
+	"messenger/internal/middleware"
 	"messenger/internal/service"
 	"net/http"
 	"strings"
@@ -16,18 +17,41 @@ func NewMessageHandler(messageService *service.MessageService) *MessageHandler {
 	return &MessageHandler{messageService: messageService}
 }
 
-func (h *MessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimSuffix(r.URL.Path, "/")
+func (h *MessageHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.Handle("/messages", h.handleMessages())
+	mux.Handle("/messages/", h.handleMessages())
+}
 
-	switch {
-	case r.Method == http.MethodPost && path == "/messages":
-		h.SendMessage(w, r)
-	case r.Method == http.MethodGet && path == "/messages":
-		h.GetAllMessages(w)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/messages/read"):
-		h.GetMessage(w, r)
-	default:
-		http.NotFound(w, r)
+func (h *MessageHandler) handleMessages() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimSuffix(r.URL.Path, "/")
+
+		switch {
+		case r.Method == http.MethodGet && path == "/messages":
+			h.GetAllMessages(w)
+		default:
+			// применяем middleware.Auth
+			middleware.Auth(
+				h.authenticatedRequests(),
+			).ServeHTTP(w, r)
+		}
+	}
+}
+
+func (h *MessageHandler) authenticatedRequests() func(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimSuffix(r.URL.Path, "/")
+		switch {
+		case r.Method == http.MethodPost && path == "/messages":
+			h.SendMessage(w, r)
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "/messages/read"):
+			h.GetMessage(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
 	}
 }
 
@@ -42,11 +66,14 @@ func (h *MessageHandler) GetAllMessages(w http.ResponseWriter) {
 }
 
 func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
+	senderID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var input struct {
-		SenderID   uuid.UUID `json:"senderID"`
-		ReceiverID uuid.UUID `json:"receiverID"`
-		ChatID     uuid.UUID `json:"chatID"`
-		Text       string    `json:"text"`
+		ChatID uuid.UUID `json:"chatID"`
+		Text   string    `json:"text"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -54,7 +81,7 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.messageService.SendMessage(input.SenderID, input.ReceiverID, input.ChatID, input.Text)
+	message, err := h.messageService.SendMessage(senderID, input.ChatID, input.Text)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -65,9 +92,14 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
+	receiverID, ok := r.Context().Value("userID").(uuid.UUID)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var input struct {
-		MessageID  uuid.UUID `json:"messageID"`
-		ReceiverID uuid.UUID `json:"receiverID"`
+		MessageID uuid.UUID `json:"messageID"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -75,7 +107,7 @@ func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.messageService.GetMessage(input.MessageID, input.ReceiverID)
+	message, err := h.messageService.GetMessage(input.MessageID, receiverID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

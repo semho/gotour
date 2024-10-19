@@ -27,4 +27,5 @@ type Storage interface {
 	RemoveUserFromChat(chatID, userID uuid.UUID) error
 	GetChatMessages(chatID uuid.UUID) ([]*model.Message, error)
 	GetAllChats() ([]*model.Chat, error)
+	IsUserInChat(chatID, userID uuid.UUID) (bool, error)
 }

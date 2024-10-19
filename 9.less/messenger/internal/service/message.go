@@ -19,7 +19,7 @@ func NewMessageService(storage storage.Storage, maxMessages int) *MessageService
 	return &MessageService{storage: storage, maxMessages: maxMessages}
 }
 
-func (s *MessageService) SendMessage(senderID, receiverID, chatID uuid.UUID, text string) (*model.Message, error) {
+func (s *MessageService) SendMessage(senderID, chatID uuid.UUID, text string) (*model.Message, error) {
 	if s.storage.GetMessageCount() >= s.maxMessages {
 		return nil, errors.New("maximum number of messages reached")
 	}
@@ -30,18 +30,27 @@ func (s *MessageService) SendMessage(senderID, receiverID, chatID uuid.UUID, tex
 	}
 
 	// являются ли отправитель и получатель участниками чата
-	if !containsUser(chat.Participants, senderID) || !containsUser(chat.Participants, receiverID) {
-		return nil, errors.New("sender or receiver is not a participant of the chat")
+	if !containsUser(chat.Participants, senderID) {
+		return nil, errors.New("sender is not a participant of the chat")
+	}
+
+	switch chat.Type {
+	case model.ChatTypePublic, model.ChatTypePrivate:
+		// Все участники могут отправлять сообщения
+	case model.ChatTypeReadOnly:
+		// Только создатель может отправлять сообщения
+		if senderID != chat.CreatorID {
+			return nil, errors.New("only the creator can send messages in read-only chats")
+		}
 	}
 
 	message := &model.Message{
-		ID:         uuid.New(),
-		SenderID:   senderID,
-		ReceiverID: receiverID,
-		ChatID:     chatID,
-		Text:       text,
-		Timestamp:  time.Now(),
-		Status:     model.MessageStatusSent,
+		ID:        uuid.New(),
+		SenderID:  senderID,
+		ChatID:    chatID,
+		Text:      text,
+		Timestamp: time.Now(),
+		Status:    model.MessageStatusSent,
 	}
 
 	return s.storage.SendMessage(message)
@@ -61,11 +70,19 @@ func (s *MessageService) GetMessage(id, requestingUserID uuid.UUID) (*model.Mess
 	if err != nil {
 		return nil, err
 	}
-	if message.SenderID != requestingUserID && message.ReceiverID != requestingUserID {
-		return nil, errors.New("access denied")
+
+	chat, err := s.storage.GetChat(message.ChatID)
+	if err != nil {
+		return nil, err
 	}
 
-	if message.ReceiverID == requestingUserID && message.Status == model.MessageStatusSent {
+	if chat.Type == model.ChatTypePrivate {
+		if !containsUser(chat.Participants, requestingUserID) {
+			return nil, errors.New("access denied")
+		}
+	}
+
+	if message.SenderID != requestingUserID && message.Status == model.MessageStatusSent {
 		message.Status = model.MessageStatusRead
 		if err = s.storage.UpdateMessageStatus(id, model.MessageStatusRead); err != nil {
 			log.Printf("Failed to update message status: %v", err)

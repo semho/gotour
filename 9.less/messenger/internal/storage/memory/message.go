@@ -25,17 +25,24 @@ func (db *DB) SendMessage(message *model.Message) (*model.Message, error) {
 		message.Timestamp = time.Now()
 	}
 
-	// существуют ли отправитель и получатель
-	if _, exists := db.users[message.SenderID]; !exists {
-		return nil, errors.New("sender not found")
-	}
-	if _, exists := db.users[message.ReceiverID]; !exists {
-		return nil, errors.New("receiver not found")
-	}
-
-	// существует ли чат
-	if _, exists := db.chats[message.ChatID]; !exists {
+	// существуют ли отправитель
+	chat, exists := db.chats[message.ChatID]
+	if !exists {
 		return nil, errors.New("chat not found")
+	}
+	// и является ли участником
+	isParticipant := false
+	for _, participantID := range chat.Participants {
+		if participantID == message.SenderID {
+			isParticipant = true
+			break
+		}
+	}
+	if !isParticipant {
+		return nil, errors.New("sender is not a participant of the chat")
+	}
+	if chat.Type == model.ChatTypeReadOnly && message.SenderID != chat.CreatorID {
+		return nil, errors.New("only the creator can send messages in read-only chats")
 	}
 
 	db.messages[message.ID] = message

@@ -18,4 +18,5 @@ type Chat struct {
 	Type         ChatType    `json:"type"`
 	Participants []uuid.UUID `json:"participants"`
 	CreatedAt    time.Time   `json:"created_at"`
+	CreatorID    uuid.UUID   `json:"creator_id"`
 }

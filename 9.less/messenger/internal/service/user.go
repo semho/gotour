@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"messenger/internal/model"
 	"messenger/internal/storage"
@@ -28,7 +29,11 @@ func (s *UserService) CreateUser(username string) (*model.User, error) {
 	return s.storage.CreateUser(user)
 }
 
-func (s *UserService) GetUser(id uuid.UUID) (*model.User, error) {
+func (s *UserService) GetUser(requesterID, id uuid.UUID) (*model.User, error) {
+	_, err := s.storage.GetUser(requesterID)
+	if err != nil {
+		return nil, fmt.Errorf("requester not found: %w", err)
+	}
 	return s.storage.GetUser(id)
 }
 

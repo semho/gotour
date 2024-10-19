@@ -2,6 +2,7 @@ package memory
 
 import (
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"messenger/internal/model"
 	"time"
@@ -34,6 +35,24 @@ func (db *DB) CreateChat(chat *model.Chat) (*model.Chat, error) {
 
 	db.chats[chat.ID] = chat
 	return chat, nil
+}
+
+func (db *DB) IsUserInChat(chatID, userID uuid.UUID) (bool, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	chat, exists := db.chats[chatID]
+	if !exists {
+		return false, fmt.Errorf("chat with ID %s not found", chatID)
+	}
+
+	for _, participantID := range chat.Participants {
+		if participantID == userID {
+			return true, nil
+		}
+	}
+
+	return false, errors.New("user not found to chat")
 }
 
 func (db *DB) GetChat(id uuid.UUID) (*model.Chat, error) {
