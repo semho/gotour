@@ -10,16 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
-type MessageService struct {
+type messageService struct {
 	storage     storage.Storage
 	maxMessages int
 }
 
-func NewMessageService(storage storage.Storage, maxMessages int) *MessageService {
-	return &MessageService{storage: storage, maxMessages: maxMessages}
+func NewMessageService(storage storage.Storage, maxMessages int) MessageService {
+	return &messageService{storage: storage, maxMessages: maxMessages}
 }
 
-func (s *MessageService) SendMessage(senderID, chatID uuid.UUID, text string) (*model.Message, error) {
+func (s *messageService) SendMessage(senderID, chatID uuid.UUID, text string) (*model.Message, error) {
 	if s.storage.GetMessageCount() >= s.maxMessages {
 		return nil, errors.New("maximum number of messages reached")
 	}
@@ -65,7 +65,7 @@ func containsUser(participants []uuid.UUID, userID uuid.UUID) bool {
 	return false
 }
 
-func (s *MessageService) GetMessage(id, requestingUserID uuid.UUID) (*model.Message, error) {
+func (s *messageService) GetMessage(id, requestingUserID uuid.UUID) (*model.Message, error) {
 	message, err := s.storage.GetMessage(id)
 	if err != nil {
 		return nil, err
@@ -92,6 +92,6 @@ func (s *MessageService) GetMessage(id, requestingUserID uuid.UUID) (*model.Mess
 	return message, nil
 }
 
-func (s *MessageService) GetAllMessages() ([]*model.Message, error) {
+func (s *messageService) GetAllMessages() ([]*model.Message, error) {
 	return s.storage.GetAllMessages()
 }

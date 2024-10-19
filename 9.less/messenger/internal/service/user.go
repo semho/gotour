@@ -8,16 +8,16 @@ import (
 	"messenger/internal/storage"
 )
 
-type UserService struct {
+type userService struct {
 	storage  storage.Storage
 	maxUsers int
 }
 
-func NewUserService(storage storage.Storage, maxUsers int) *UserService {
-	return &UserService{storage: storage, maxUsers: maxUsers}
+func NewUserService(storage storage.Storage, maxUsers int) UserService {
+	return &userService{storage: storage, maxUsers: maxUsers}
 }
 
-func (s *UserService) CreateUser(username string) (*model.User, error) {
+func (s *userService) CreateUser(username string) (*model.User, error) {
 	if s.storage.GetUserCount() >= s.maxUsers {
 		return nil, errors.New("maximum number of users reached")
 	}
@@ -29,7 +29,7 @@ func (s *UserService) CreateUser(username string) (*model.User, error) {
 	return s.storage.CreateUser(user)
 }
 
-func (s *UserService) GetUser(requesterID, id uuid.UUID) (*model.User, error) {
+func (s *userService) GetUser(requesterID, id uuid.UUID) (*model.User, error) {
 	_, err := s.storage.GetUser(requesterID)
 	if err != nil {
 		return nil, fmt.Errorf("requester not found: %w", err)
@@ -37,6 +37,6 @@ func (s *UserService) GetUser(requesterID, id uuid.UUID) (*model.User, error) {
 	return s.storage.GetUser(id)
 }
 
-func (s *UserService) GetAllUsers() ([]*model.User, error) {
+func (s *userService) GetAllUsers() ([]*model.User, error) {
 	return s.storage.GetAllUsers()
 }

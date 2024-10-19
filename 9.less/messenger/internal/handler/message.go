@@ -10,10 +10,10 @@ import (
 )
 
 type MessageHandler struct {
-	messageService *service.MessageService
+	messageService service.MessageService
 }
 
-func NewMessageHandler(messageService *service.MessageService) *MessageHandler {
+func NewMessageHandler(messageService service.MessageService) *MessageHandler {
 	return &MessageHandler{messageService: messageService}
 }
 

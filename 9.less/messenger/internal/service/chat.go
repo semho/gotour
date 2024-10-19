@@ -10,16 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
-type ChatService struct {
+type chatService struct {
 	storage  storage.Storage
 	maxChats int
 }
 
-func NewChatService(storage storage.Storage, maxChats int) *ChatService {
-	return &ChatService{storage: storage, maxChats: maxChats}
+func NewChatService(storage storage.Storage, maxChats int) ChatService {
+	return &chatService{storage: storage, maxChats: maxChats}
 }
 
-func (s *ChatService) CreateChat(creatorID uuid.UUID, chatType model.ChatType, participantIDs []uuid.UUID) (
+func (s *chatService) CreateChat(creatorID uuid.UUID, chatType model.ChatType, participantIDs []uuid.UUID) (
 	*model.Chat,
 	error,
 ) {
@@ -45,11 +45,11 @@ func (s *ChatService) CreateChat(creatorID uuid.UUID, chatType model.ChatType, p
 	return s.storage.CreateChat(chat)
 }
 
-func (s *ChatService) GetChat(id uuid.UUID) (*model.Chat, error) {
+func (s *chatService) GetChat(id uuid.UUID) (*model.Chat, error) {
 	return s.storage.GetChat(id)
 }
 
-func (s *ChatService) AddUserToChat(chatID, userID, requesterID uuid.UUID) error {
+func (s *chatService) AddUserToChat(chatID, userID, requesterID uuid.UUID) error {
 	chat, err := s.storage.GetChat(chatID)
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func (s *ChatService) AddUserToChat(chatID, userID, requesterID uuid.UUID) error
 	return s.storage.AddUserToChat(chatID, userID)
 }
 
-func (s *ChatService) RemoveUserFromChat(requesterID, chatID, userID uuid.UUID) error {
+func (s *chatService) RemoveUserFromChat(requesterID, chatID, userID uuid.UUID) error {
 	chat, err := s.storage.GetChat(chatID)
 	if err != nil {
 		return fmt.Errorf("failed to get chat: %w", err)
@@ -131,7 +131,7 @@ func (s *ChatService) RemoveUserFromChat(requesterID, chatID, userID uuid.UUID) 
 	return nil
 }
 
-func (s *ChatService) GetChatMessages(chatID, requesterID uuid.UUID) ([]*model.Message, error) {
+func (s *chatService) GetChatMessages(chatID, requesterID uuid.UUID) ([]*model.Message, error) {
 	chat, err := s.storage.GetChat(chatID)
 	if err != nil {
 		return nil, err
@@ -155,6 +155,6 @@ func (s *ChatService) GetChatMessages(chatID, requesterID uuid.UUID) ([]*model.M
 	return s.storage.GetChatMessages(chatID)
 }
 
-func (s *ChatService) GetAllChats() ([]*model.Chat, error) {
+func (s *chatService) GetAllChats() ([]*model.Chat, error) {
 	return s.storage.GetAllChats()
 }
