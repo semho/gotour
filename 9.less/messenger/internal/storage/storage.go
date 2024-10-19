@@ -6,20 +6,27 @@ import (
 )
 
 type Storage interface {
-	// User
+	UserStorage
+	MessageStorage
+	ChatStorage
+}
+
+type UserStorage interface {
 	CreateUser(user *model.User) (*model.User, error)
 	GetUserCount() int
 	GetUser(id uuid.UUID) (*model.User, error)
 	GetAllUsers() ([]*model.User, error)
+}
 
-	// Message
+type MessageStorage interface {
 	GetMessageCount() int
 	SendMessage(message *model.Message) (*model.Message, error)
 	GetMessage(id uuid.UUID) (*model.Message, error)
 	UpdateMessageStatus(id uuid.UUID, status model.MessageStatus) error
 	GetAllMessages() ([]*model.Message, error)
+}
 
-	// Chat
+type ChatStorage interface {
 	GetChatCount() int
 	CreateChat(chat *model.Chat) (*model.Chat, error)
 	GetChat(id uuid.UUID) (*model.Chat, error)
