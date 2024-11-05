@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS anon_counts;
+DROP TABLE IF EXISTS anon_nicknames;
+DROP TABLE IF EXISTS chat_access;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS chats;
+DROP TABLE IF EXISTS sessions;

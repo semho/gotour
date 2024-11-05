@@ -1,4 +1,4 @@
-.PHONY: generate build test lint run fmt
+.PHONY: generate build test lint run fmt migrate-up migrate-down migrate-create
 
 CURDIR=$(shell pwd)
 LOCAL_BIN:=$(CURDIR)/bin
@@ -7,6 +7,7 @@ GO_OUT_DIR := pkg
 PROTO_FILE := chat/v1/chat.proto
 DOCKER_IMAGE_NAME := chat-server
 DOCKER_CONTAINER_NAME := chat-server-container
+MIGRATIONS_DIR:= migrations
 
 install-deps:
 	@echo "Installing dependencies..."
@@ -16,6 +17,8 @@ install-deps:
 	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.15.2
 	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.15.2
 	@GOBIN=$(LOCAL_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
+	@GOBIN=$(LOCAL_BIN) go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
 
 generate:
 	@echo "Generating Go code from protobuf..."
@@ -65,5 +68,28 @@ docker-run:
 docker-stop:
 	@echo "Stopping Docker container..."
 	@docker stop $(DOCKER_CONTAINER_NAME) || true
+
+migrate-create:
+	@echo "Creating migration files..."
+	@if [ -z "$(name)" ]; then echo "Please specify migration name by running 'make migrate-create name=your_migration_name'"; exit 1; fi
+	@mkdir -p $(MIGRATIONS_DIR)
+	@$(LOCAL_BIN)/migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(name)
+
+migrate-up:
+	@echo "Running migrations up..."
+	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
+	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" up
+
+migrate-down:
+	@echo "Running migrations down..."
+	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
+	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" down
+
+migrate-force:
+	@echo "Forcing migration version..."
+	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
+	@if [ -z "$(version)" ]; then echo "Please specify version"; exit 1; fi
+	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" force $(version)
+
 
 .DEFAULT_GOAL := build

@@ -2,6 +2,7 @@ package main
 
 import (
 	"chat/internal/storage"
+	"chat/internal/storage/postgres"
 	"chat/pkg/logger"
 	"os"
 	"os/signal"
@@ -29,9 +30,24 @@ func main() {
 		logger.Log.Error("Redis storage not implemented yet")
 		os.Exit(1)
 	case "postgres":
-		// TODO: Implement Postgres storage
-		logger.Log.Error("Postgres storage not implemented yet")
-		os.Exit(1)
+		var err error
+		storage, err = postgres.NewPostgresStorage(
+			cfg.StorageDSN,
+			cfg.MaxChatSize,
+			cfg.MaxChatsCount,
+		)
+		if err != nil {
+			logger.Log.Error("Failed to initialize Postgres storage", "error", err)
+			os.Exit(1)
+		}
+
+		if closer, ok := storage.(interface{ Close() error }); ok {
+			defer func() {
+				if err := closer.Close(); err != nil {
+					logger.Log.Error("Failed to close storage connection", "error", err)
+				}
+			}()
+		}
 	default:
 		logger.Log.Error("Unknown storage type", "type", cfg.StorageType)
 		os.Exit(1)

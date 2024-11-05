@@ -126,3 +126,6 @@
 затем
 ```make docker-run ARGS="--grpc-port=50052"```   
 либо любой другой аргумент из конфига
+### Запуск миграций
+```bash
+   make migrate-up DB_DSN="postgres://username:password@localhost:5432/dbname?sslmode=disable"
