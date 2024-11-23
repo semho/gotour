@@ -8,6 +8,7 @@ PROTO_FILE := chat/v1/chat.proto
 DOCKER_IMAGE_NAME := chat-server
 DOCKER_CONTAINER_NAME := chat-server-container
 MIGRATIONS_DIR:= migrations
+DB_DSN := postgresql://user:password@chat-postgres:5432/chatdb?sslmode=disable
 
 install-deps:
 	@echo "Installing dependencies..."
@@ -77,19 +78,56 @@ migrate-create:
 
 migrate-up:
 	@echo "Running migrations up..."
-	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
-	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" up
+	docker-compose exec chat-app ./bin/migrate -migrations $(MIGRATIONS_DIR) -dsn "$(DB_DSN)" up
 
 migrate-down:
 	@echo "Running migrations down..."
-	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
-	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" down
+	docker-compose exec chat-app ./bin/migrate -migrations $(MIGRATIONS_DIR) -dsn "$(DB_DSN)" down
 
 migrate-force:
 	@echo "Forcing migration version..."
-	@if [ -z "$(DB_DSN)" ]; then echo "Please specify DB_DSN"; exit 1; fi
-	@if [ -z "$(version)" ]; then echo "Please specify version"; exit 1; fi
-	@$(LOCAL_BIN)/migrate -path $(MIGRATIONS_DIR) -database "$(DB_DSN)" force $(version)
+	@if [ -z "$(version)" ]; then \
+		echo "Please specify version"; \
+		exit 1; \
+	fi
+	docker-compose exec chat-app ./bin/migrate -migrations $(MIGRATIONS_DIR) -dsn "$(DB_DSN)" force $(version)
 
+migrate-version:
+	@echo "Checking current migration version..."
+	docker-compose exec chat-app ./bin/migrate -migrations $(MIGRATIONS_DIR) -dsn "$(DB_DSN)" version
+
+migrate-status:
+	@echo "Checking migrations status..."
+	docker-compose exec chat-app ./bin/migrate -migrations $(MIGRATIONS_DIR) -dsn "$(DB_DSN)" -status
+
+docker-compose-build:
+	docker-compose build
+
+docker-compose-up:
+	docker-compose up -d
+
+docker-compose-down:
+	docker-compose down -v
+
+# тут может передавать параметры
+docker-compose-run:
+	@echo "Starting with storage type: $(or $(STORAGE),postgres)"
+	GRPC_PORT=$(or $(GRPC_PORT),50051) \
+	HTTP_PORT=$(or $(HTTP_PORT),8080) \
+	STORAGE=$(or $(STORAGE),postgres) \
+	MAX_CHAT_SIZE=$(or $(MAX_CHAT_SIZE),1000) \
+	MAX_CHATS_COUNT=$(or $(MAX_CHATS_COUNT),1000) \
+	DEFAULT_TTL=$(or $(DEFAULT_TTL),24h) \
+	docker-compose up -d
+
+docker-compose-logs:
+	docker-compose logs -f
+
+# применения миграций в контейнере
+docker-compose-migrate:
+	docker-compose exec app ./bin/migrate \
+		-path=migrations \
+		-database="postgresql://user:password@postgres:5432/chatdb?sslmode=disable" \
+		up
 
 .DEFAULT_GOAL := build

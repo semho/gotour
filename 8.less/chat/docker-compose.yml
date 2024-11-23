@@ -1,0 +1,48 @@
+services:
+  chat-app:
+    container_name: chat-app
+    networks:
+      - chat-network
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${GRPC_PORT:-50051}:50051"
+      - "${HTTP_PORT:-8080}:8080"
+    environment:
+      - GRPC_PORT=${GRPC_PORT:-50051}
+      - HTTP_PORT=${HTTP_PORT:-8080}
+      - STORAGE=${STORAGE:-postgres}
+      - STORAGE_DSN=postgres://user:password@chat-postgres:5432/chatdb?sslmode=disable
+      - MAX_CHAT_SIZE=${MAX_CHAT_SIZE:-1000}
+      - MAX_CHATS_COUNT=${MAX_CHATS_COUNT:-1000}
+      - DEFAULT_TTL=${DEFAULT_TTL:-24h}
+    depends_on:
+      chat-postgres:
+        condition: service_healthy
+
+  chat-postgres:
+    image: postgres:16-alpine
+    container_name: chat-postgres
+    networks:
+      - chat-network
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chatdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d chatdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  chat-network:
+    driver: bridge

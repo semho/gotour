@@ -435,10 +435,19 @@ func (s *ChatService) GrantChatAccess(ctx context.Context, req *pb.GrantChatAcce
 	*pb.GrantChatAccessResponse,
 	error,
 ) {
-	logger.Log.Info("Grant chat access", "ChatId", req.ChatId)
+	logger.Log.Info(
+		"Grant chat access request",
+		"ChatId", req.ChatId,
+		"SessionToGrant", req.SessionId,
+	)
+
 	sessionID, ok := middleware.GetSessionID(ctx)
 	if !ok {
 		return nil, status.Errorf(codes.Unauthenticated, customerrors.ErrMsgSessionNotFound)
+	}
+
+	if sessionID == req.SessionId {
+		return &pb.GrantChatAccessResponse{Status: "already_has_access"}, nil
 	}
 
 	isOwner, err := s.storage.IsChatOwner(ctx, req.ChatId, sessionID)
