@@ -3,10 +3,13 @@ package postgres
 import (
 	"chat/internal/models"
 	"chat/pkg/customerrors"
+	"chat/pkg/logger"
 	"context"
 	"database/sql"
-	_ "github.com/lib/pq"
 	"time"
+
+	// postgres driver, используется для регистрации драйвера БД
+	_ "github.com/lib/pq"
 )
 
 type Storage struct {
@@ -102,7 +105,11 @@ func (s *Storage) CreateChat(ctx context.Context, chat *models.Chat) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logger.Log.Error("Failed to rollback transaction in CreateChat", "error", err)
+		}
+	}()
 
 	query := `
 		INSERT INTO chats (id, history_size, ttl, read_only, private, owner_id)
@@ -180,7 +187,11 @@ func (s *Storage) GetAndIncrementAnonCount(ctx context.Context, chatID string) (
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logger.Log.Error("Failed to rollback transaction in GetAndIncrementAnonCount", "error", err)
+		}
+	}()
 
 	var count int
 	err = tx.QueryRowContext(
@@ -250,7 +261,11 @@ func (s *Storage) AddMessage(ctx context.Context, message *models.Message) error
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			logger.Log.Error("Failed to rollback transaction in AddMessage", "error", err)
+		}
+	}()
 
 	var currentSize int
 	err = tx.QueryRowContext(
@@ -492,4 +507,15 @@ func (s *Storage) IsChatOwner(ctx context.Context, chatID, sessionID string) (bo
 	}
 
 	return ownerID == sessionID, nil
+}
+
+func (s *Storage) SaveAnonNickname(ctx context.Context, chatID, sessionID, nickname string) error {
+	query := `
+        INSERT INTO anon_nicknames (chat_id, session_id, nickname)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (chat_id, session_id) DO UPDATE
+        SET nickname = EXCLUDED.nickname
+    `
+	_, err := s.db.ExecContext(ctx, query, chatID, sessionID, nickname)
+	return err
 }

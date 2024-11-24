@@ -16,6 +16,8 @@ type Config struct {
 	StorageType   string
 	StorageDSN    string
 	DefaultTTL    time.Duration
+	KafkaBrokers  string
+	KafkaTopic    string
 }
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -71,6 +73,18 @@ func NewConfig() *Config {
 		&cfg.StorageDSN, "storage-dsn",
 		getEnvOrDefault("STORAGE_DSN", ""),
 		"Storage DSN (for redis or postgres)",
+	)
+
+	pflag.StringVar(
+		&cfg.KafkaBrokers, "kafka-brokers",
+		getEnvOrDefault("KAFKA_BROKERS", "localhost:9092"),
+		"Kafka brokers list (comma-separated)",
+	)
+
+	pflag.StringVar(
+		&cfg.KafkaTopic, "kafka-topic",
+		getEnvOrDefault("KAFKA_TOPIC", "chat.messages"),
+		"Kafka topic for chat messages",
 	)
 
 	defaultTTL := 24 * time.Hour

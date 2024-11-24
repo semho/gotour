@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package kafka_v1;
+
+option go_package = "chat/pkg/kafka_v1;kafka_v1";
+
+import "google/protobuf/timestamp.proto";
+
+
+message ChatMessageEvent {
+
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_CREATED = 1;
+    EVENT_TYPE_UPDATED = 2;
+    EVENT_TYPE_DELETED = 3;
+  }
+
+  message Metadata {
+    string event_id = 1;
+    google.protobuf.Timestamp created_at = 2;
+    EventType event_type = 3;
+  }
+
+  message Payload {
+    string message_id = 1;
+    string chat_id = 2;
+    string session_id = 3;
+    string nickname = 4;
+    string text = 5;
+    google.protobuf.Timestamp timestamp = 6;
+  }
+
+  Metadata metadata = 1;
+  Payload payload = 2;
+}

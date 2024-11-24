@@ -4,7 +4,8 @@ CURDIR=$(shell pwd)
 LOCAL_BIN:=$(CURDIR)/bin
 PROTO_DIR := proto
 GO_OUT_DIR := pkg
-PROTO_FILE := chat/v1/chat.proto
+PROTO_FILE_CHAT := chat/v1/chat.proto
+PROTO_FILE_KAFKA := kafka/v1/kafka.proto
 DOCKER_IMAGE_NAME := chat-server
 DOCKER_CONTAINER_NAME := chat-server-container
 MIGRATIONS_DIR:= migrations
@@ -18,11 +19,12 @@ install-deps:
 	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.15.2
 	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.15.2
 	@GOBIN=$(LOCAL_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3
+	@GOBIN=$(LOCAL_BIN) go install golang.org/x/tools/cmd/goimports@latest
 	@GOBIN=$(LOCAL_BIN) go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 
-generate:
-	@echo "Generating Go code from protobuf..."
+generate-chat:
+	@echo "Generating Go code from protobuf chat"
 	@mkdir -p ./$(GO_OUT_DIR)/chat/v1
 	@PATH="$(LOCAL_BIN):$(PATH)" protoc \
     		-I=./$(PROTO_DIR) \
@@ -35,8 +37,21 @@ generate:
     		--grpc-gateway_out=./$(GO_OUT_DIR) --grpc-gateway_opt=paths=source_relative \
     		--validate_out="lang=go,paths=source_relative:./$(GO_OUT_DIR)" \
     		--openapiv2_out=./$(GO_OUT_DIR) \
-    		./$(PROTO_DIR)/$(PROTO_FILE)
+    		./$(PROTO_DIR)/$(PROTO_FILE_CHAT)
 
+generate-kafka:
+	@echo "Generating Go code from protobuf kafka"
+	@mkdir -p ./$(GO_OUT_DIR)/kafka/v1
+	@PATH="$(LOCAL_BIN):$(PATH)" protoc \
+			-I=./$(PROTO_DIR) \
+			-I=./proto \
+			--go_out=./$(GO_OUT_DIR) --go_opt=paths=source_relative \
+			--go-grpc_out=./$(GO_OUT_DIR) --go-grpc_opt=paths=source_relative \
+			--grpc-gateway_out=./$(GO_OUT_DIR) --grpc-gateway_opt=paths=source_relative \
+			--validate_out="lang=go,paths=source_relative:./$(GO_OUT_DIR)" \
+			./$(PROTO_DIR)/$(PROTO_FILE_KAFKA)
+
+generate: generate-chat generate-kafka
 
 build: generate
 	@echo "Building..."
@@ -48,11 +63,11 @@ test:
 
 fmt:
 	@echo "Running goimports..."
-	@goimports -w .
+	@$(LOCAL_BIN)/goimports -w .
 
 lint: fmt
 	@echo "Running linter..."
-	@golangci-lint run
+	@$(LOCAL_BIN)/golangci-lint run
 
 run: generate
 	@echo "Running server..."
@@ -118,16 +133,13 @@ docker-compose-run:
 	MAX_CHAT_SIZE=$(or $(MAX_CHAT_SIZE),1000) \
 	MAX_CHATS_COUNT=$(or $(MAX_CHATS_COUNT),1000) \
 	DEFAULT_TTL=$(or $(DEFAULT_TTL),24h) \
+ 	KAFKA_BROKERS=$(or $(KAFKA_BROKERS),kafka:9092) \
+	KAFKA_TOPIC=$(or $(KAFKA_TOPIC),chat.messages) \
+	KAFKA_GROUP_ID=$(or $(KAFKA_GROUP_ID),message-worker-group) \
 	docker-compose up -d
 
 docker-compose-logs:
 	docker-compose logs -f
 
-# применения миграций в контейнере
-docker-compose-migrate:
-	docker-compose exec app ./bin/migrate \
-		-path=migrations \
-		-database="postgresql://user:password@postgres:5432/chatdb?sslmode=disable" \
-		up
 
 .DEFAULT_GOAL := build

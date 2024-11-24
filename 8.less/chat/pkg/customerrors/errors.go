@@ -39,6 +39,7 @@ const (
 	ErrMsgFailedToGetAccessRequests          = "failed to get access requests"
 	ErrMsgFailedToGrantChatAccess            = "failed to grant chat access"
 	ErrMsgFailedToGetAnonCount               = "failed to get or increment anonymous user count"
+	ErrMsgFailedCreateProducer               = "failed to create kafka producer"
 )
 
 func FormatError(baseMsg string, err error) string {

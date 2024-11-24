@@ -5,6 +5,7 @@ import (
 	"chat/internal/middleware"
 	"chat/internal/models"
 	pb "chat/pkg/chat/v1"
+	kafka_v1 "chat/pkg/kafka/v1"
 	"chat/pkg/logger"
 	"context"
 	"io"
@@ -20,13 +21,32 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+type MockProducer struct {
+	mock.Mock
+}
+
+func (m *MockProducer) SendMessage(ctx context.Context, event *kafka_v1.ChatMessageEvent) error {
+	args := m.Called(ctx, event)
+	return args.Error(0)
+}
+
+func (m *MockProducer) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockStorage) CreateSession(ctx context.Context, session *models.Session) error {
+	args := m.Called(ctx, session)
+	return args.Error(0)
+}
+
 // MockStorage - мок для хранилища
 type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) CreateSession(ctx context.Context, session *models.Session) error {
-	args := m.Called(ctx, session)
+func (m *MockStorage) SaveAnonNickname(ctx context.Context, chatID, sessionID, nickname string) error {
+	args := m.Called(ctx, chatID, sessionID, nickname)
 	return args.Error(0)
 }
 
@@ -131,7 +151,8 @@ func TestMain(m *testing.M) {
 
 func TestCreateSession(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	ctx := context.Background()
 	req := &pb.CreateSessionRequest{Nickname: "testuser"}
@@ -150,7 +171,8 @@ func TestCreateSession(t *testing.T) {
 
 func TestCreateChat(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -184,7 +206,8 @@ func TestCreateChat(t *testing.T) {
 
 func TestCreateChat_DefaultHistorySize(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -220,7 +243,8 @@ func TestCreateChat_DefaultHistorySize(t *testing.T) {
 
 func TestDeleteChat(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -240,7 +264,8 @@ func TestDeleteChat(t *testing.T) {
 
 func TestDeleteChat_NotOwner(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -259,7 +284,8 @@ func TestDeleteChat_NotOwner(t *testing.T) {
 
 func TestSetChatTTL(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -282,7 +308,8 @@ func TestSetChatTTL(t *testing.T) {
 
 func TestSetChatTTL_NotOwner(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -304,7 +331,8 @@ func TestSetChatTTL_NotOwner(t *testing.T) {
 
 func TestSendMessage(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -328,7 +356,20 @@ func TestSendMessage(t *testing.T) {
 
 	mockStorage.On("GetChat", mock.Anything, req.ChatId).Return(mockChat, nil)
 	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
-	mockStorage.On("AddMessage", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
+
+	mockProducer.On(
+		"SendMessage",
+		mock.Anything,
+		mock.MatchedBy(
+			func(event *kafka_v1.ChatMessageEvent) bool {
+				return event.Payload.ChatId == req.ChatId &&
+					event.Payload.Text == req.Text &&
+					event.Payload.SessionId == sessionID &&
+					event.Payload.Nickname == mockSession.Nickname &&
+					event.Metadata.EventType == kafka_v1.ChatMessageEvent_EVENT_TYPE_CREATED
+			},
+		),
+	).Return(nil)
 
 	resp, err := service.SendMessage(ctx, req)
 
@@ -340,11 +381,13 @@ func TestSendMessage(t *testing.T) {
 	assert.Equal(t, "TestUser", resp.Nickname)
 
 	mockStorage.AssertExpectations(t)
+	mockProducer.AssertExpectations(t)
 }
 
 func TestSendMessage_AnonymousUser(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -362,14 +405,29 @@ func TestSendMessage_AnonymousUser(t *testing.T) {
 
 	mockSession := &models.Session{
 		ID:            sessionID,
-		Nickname:      "",
+		Nickname:      "", // Пустой никнейм для анонимного пользователя
 		AnonNicknames: make(map[string]string),
 	}
 
 	mockStorage.On("GetChat", mock.Anything, req.ChatId).Return(mockChat, nil)
 	mockStorage.On("GetSession", mock.Anything, sessionID).Return(mockSession, nil)
 	mockStorage.On("GetAndIncrementAnonCount", mock.Anything, req.ChatId).Return(1, nil)
-	mockStorage.On("AddMessage", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
+	mockStorage.On("SaveAnonNickname", mock.Anything, req.ChatId, sessionID, "Аноним #1").Return(nil)
+
+	mockProducer.On(
+		"SendMessage",
+		mock.AnythingOfType("*context.valueCtx"),
+		mock.MatchedBy(
+			func(event *kafka_v1.ChatMessageEvent) bool {
+				return event != nil &&
+					event.Payload != nil &&
+					event.Payload.ChatId == req.ChatId &&
+					event.Payload.Text == req.Text &&
+					event.Payload.SessionId == sessionID &&
+					event.Payload.Nickname == "Аноним #1"
+			},
+		),
+	).Return(nil)
 
 	resp, err := service.SendMessage(ctx, req)
 
@@ -381,11 +439,13 @@ func TestSendMessage_AnonymousUser(t *testing.T) {
 	assert.Equal(t, "Аноним #1", resp.Nickname)
 
 	mockStorage.AssertExpectations(t)
+	mockProducer.AssertExpectations(t)
 }
 
 func TestGetChatHistory(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	chatID := "test_chat_id"
@@ -426,7 +486,8 @@ func TestGetChatHistory(t *testing.T) {
 
 func TestRequestChatAccess(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -454,7 +515,8 @@ func TestRequestChatAccess(t *testing.T) {
 
 func TestGetAccessRequests(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -484,7 +546,8 @@ func TestGetAccessRequests(t *testing.T) {
 
 func TestGetAccessRequests_NotOwner(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -503,7 +566,8 @@ func TestGetAccessRequests_NotOwner(t *testing.T) {
 
 func TestGrantChatAccess(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -526,7 +590,8 @@ func TestGrantChatAccess(t *testing.T) {
 
 func TestGrantChatAccess_NotOwner(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	sessionID := "test_session_id"
 	ctx := createContextWithSession(sessionID)
@@ -548,7 +613,8 @@ func TestGrantChatAccess_NotOwner(t *testing.T) {
 
 func TestCreateSession_Error(t *testing.T) {
 	mockStorage := new(MockStorage)
-	service := NewChatService(mockStorage)
+	mockProducer := new(MockProducer)
+	service := NewChatServiceWithProducer(mockStorage, mockProducer)
 
 	ctx := context.Background()
 	req := &pb.CreateSessionRequest{Nickname: "testuser"}

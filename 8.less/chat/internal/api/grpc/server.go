@@ -56,3 +56,10 @@ func (s *Server) Stop() {
 		s.grpcServer.GracefulStop()
 	}
 }
+
+func (s *Server) Close() error {
+	if s.chatService != nil {
+		return s.chatService.Close()
+	}
+	return nil
+}

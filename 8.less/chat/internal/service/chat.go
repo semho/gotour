@@ -3,11 +3,16 @@ package service
 import (
 	"chat/internal/middleware"
 	"chat/pkg/customerrors"
+	"chat/pkg/kafka/producer"
+	kafka_v1 "chat/pkg/kafka/v1"
 	"chat/pkg/logger"
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
+
+	"github.com/google/uuid"
 
 	"chat/internal/models"
 	"chat/internal/storage"
@@ -21,11 +26,29 @@ import (
 
 type ChatService struct {
 	pb.UnimplementedChatServiceServer
-	storage storage.Storage
+	storage  storage.Storage
+	producer producer.Producer
 }
 
-func NewChatService(storage storage.Storage) *ChatService {
-	return &ChatService{storage: storage}
+func NewChatService(storage storage.Storage, kafkaBrokers []string, topic string) (*ChatService, error) {
+	prod, err := producer.NewKafkaProducer(kafkaBrokers, topic)
+	if err != nil {
+		logger.Log.Error(customerrors.ErrMsgFailedCreateProducer, "error", err)
+		return nil, status.Errorf(
+			codes.Internal,
+			//nolint:govet
+			customerrors.FormatError(customerrors.ErrMsgFailedCreateProducer, err),
+		)
+	}
+
+	return &ChatService{storage: storage, producer: prod}, nil
+}
+
+func NewChatServiceWithProducer(storage storage.Storage, prod producer.Producer) *ChatService {
+	return &ChatService{
+		storage:  storage,
+		producer: prod,
+	}
 }
 
 func (s *ChatService) CreateSession(ctx context.Context, req *pb.CreateSessionRequest) (*pb.Session, error) {
@@ -83,6 +106,10 @@ func (s *ChatService) CreateChat(ctx context.Context, req *pb.CreateChatRequest)
 	historySize := int(req.HistorySize)
 	if historySize <= 0 {
 		historySize = s.storage.GetDefaultHistorySize()
+	}
+
+	if historySize > math.MaxInt32 {
+		return nil, status.Errorf(codes.InvalidArgument, "history size too large, maximum value is %d", math.MaxInt32)
 	}
 
 	chat := models.NewChat(int(req.HistorySize), ttl, req.ReadOnly, req.Private, sessionID)
@@ -252,39 +279,49 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 		)
 	}
 
+	// Получаем или генерируем никнейм
 	var nickname string
-	if session.Nickname != "" {
-		nickname = session.Nickname
-	} else {
-		if anonNickname, exists := session.AnonNicknames[req.ChatId]; exists {
-			nickname = anonNickname
+	if session.Nickname == "" {
+		if existingNickname, exists := session.AnonNicknames[req.ChatId]; exists {
+			nickname = existingNickname
 		} else {
 			anonCount, err := s.storage.GetAndIncrementAnonCount(ctx, req.ChatId)
 			if err != nil {
-				logger.Log.Error(customerrors.ErrMsgFailedToGetAnonCount, "error", err)
-				return nil, status.Errorf(
-					codes.Internal,
-					//nolint:govet
-					customerrors.FormatError(customerrors.ErrMsgFailedToGetAnonCount, err),
-				)
+				return nil, status.Errorf(codes.Internal, "failed to generate anonymous nickname: %v", err)
 			}
 			nickname = fmt.Sprintf("Аноним #%d", anonCount)
-			session.AnonNicknames[req.ChatId] = nickname
+
+			if err := s.storage.SaveAnonNickname(ctx, req.ChatId, sessionID, nickname); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to save anonymous nickname: %v", err)
+			}
 		}
+	} else {
+		nickname = session.Nickname
 	}
 
 	message := models.NewMessage(req.ChatId, sessionID, nickname, req.Text)
-	if message.ChatID != req.ChatId {
-		logger.Log.Error("Mismatch in ChatId", "RequestChatId", req.ChatId, "MessageChatId", message.ChatID)
-		return nil, status.Errorf(codes.Internal, "Internal error: ChatId mismatch")
+	// евент под кафка
+	event := &kafka_v1.ChatMessageEvent{
+		Metadata: &kafka_v1.ChatMessageEvent_Metadata{
+			EventId:   uuid.New().String(),
+			CreatedAt: timestamppb.Now(),
+			EventType: kafka_v1.ChatMessageEvent_EVENT_TYPE_CREATED,
+		},
+		Payload: &kafka_v1.ChatMessageEvent_Payload{
+			MessageId: message.ID,
+			ChatId:    message.ChatID,
+			SessionId: message.SessionID,
+			Nickname:  message.Nickname,
+			Text:      message.Text,
+			Timestamp: timestamppb.New(message.Timestamp),
+		},
+	}
+	//отправка в кафка
+	if err = s.producer.SendMessage(ctx, event); err != nil {
+		logger.Log.Error("Send message to kafka", "Error", err)
+		return nil, status.Errorf(codes.Internal, "failed to send message to kafka: %v", err)
 	}
 
-	err = s.storage.AddMessage(ctx, message)
-	if err != nil {
-		logger.Log.Error(customerrors.ErrMsgFailedToSendMessage, "error", err)
-		//nolint:govet
-		return nil, status.Errorf(codes.Internal, customerrors.FormatError(customerrors.ErrMsgFailedToSendMessage, err))
-	}
 	return &pb.Message{
 		Id:        message.ID,
 		ChatId:    message.ChatID,
@@ -293,6 +330,13 @@ func (s *ChatService) SendMessage(ctx context.Context, req *pb.SendMessageReques
 		Text:      message.Text,
 		Timestamp: timestamppb.New(message.Timestamp),
 	}, nil
+}
+
+func (s *ChatService) Close() error {
+	if s.producer != nil {
+		return s.producer.Close()
+	}
+	return nil
 }
 
 func (s *ChatService) GetChatHistory(ctx context.Context, req *pb.GetChatHistoryRequest) (*pb.ChatHistory, error) {

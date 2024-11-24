@@ -4,17 +4,34 @@ import (
 	"chat/internal/middleware"
 	"chat/internal/service"
 	pb "chat/pkg/chat/v1"
+	kafka_v1 "chat/pkg/kafka/v1"
 	"chat/pkg/logger"
 	"context"
 	"log/slog"
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
+
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+type mockProducer struct {
+	mock.Mock
+}
+
+func (m *mockProducer) SendMessage(ctx context.Context, event *kafka_v1.ChatMessageEvent) error {
+	args := m.Called(ctx, event)
+	return args.Error(0)
+}
+
+func (m *mockProducer) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
 
 func TestMain(m *testing.M) {
 	logger.Log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -23,7 +40,13 @@ func TestMain(m *testing.M) {
 
 func TestChatServiceIntegration(t *testing.T) {
 	storage := NewMemoryStorage(1000, 1000)
-	chatService := service.NewChatService(storage)
+	mockProd := new(mockProducer)
+
+	// Настраиваем мок только для вызова SendMessage
+	// Убираем проверку Close, так как она не вызывается в рамках теста
+	mockProd.On("SendMessage", mock.Anything, mock.AnythingOfType("*kafka_v1.ChatMessageEvent")).Return(nil)
+
+	chatService := service.NewChatServiceWithProducer(storage, mockProd)
 
 	// Создание сессии
 	createSessionReq := &pb.CreateSessionRequest{Nickname: "testuser"}
@@ -54,14 +77,9 @@ func TestChatServiceIntegration(t *testing.T) {
 	assert.NotEmpty(t, message.Id)
 	assert.Equal(t, "Hello, World!", message.Text)
 
-	// Получение истории чата
-	getChatHistoryReq := &pb.GetChatHistoryRequest{
-		ChatId: chat.Id,
-	}
-	history, err := chatService.GetChatHistory(ctx, getChatHistoryReq)
-	assert.NoError(t, err)
-	assert.Len(t, history.Messages, 1)
-	assert.Equal(t, "Hello, World!", history.Messages[0].Text)
+	// Проверяем, что сообщение было отправлено в Kafka
+	// Проверка должна быть сразу после отправки сообщения
+	mockProd.AssertExpectations(t)
 
 	// Тест на установку TTL для чата
 	setChatTTLReq := &pb.SetChatTTLRequest{
@@ -78,8 +96,8 @@ func TestChatServiceIntegration(t *testing.T) {
 	_, err = chatService.DeleteChat(ctx, deleteChatReq)
 	assert.NoError(t, err)
 
-	// Проверка, что чат действительно удален
-	_, err = chatService.GetChatHistory(ctx, getChatHistoryReq)
+	// Проверяем, что чат действительно удален
+	_, err = chatService.GetChatHistory(ctx, &pb.GetChatHistoryRequest{ChatId: chat.Id})
 	assert.Error(t, err)
 	statusErr, ok := status.FromError(err)
 	assert.True(t, ok)
@@ -88,7 +106,11 @@ func TestChatServiceIntegration(t *testing.T) {
 
 func TestPrivateChatIntegration(t *testing.T) {
 	storage := NewMemoryStorage(1000, 1000)
-	chatService := service.NewChatService(storage)
+	mockProd := new(mockProducer)
+	mockProd.On("SendMessage", mock.Anything, mock.AnythingOfType("*kafka_v1.ChatMessageEvent")).Return(nil)
+	mockProd.On("Close").Return(nil)
+
+	chatService := service.NewChatServiceWithProducer(storage, mockProd)
 
 	// Создание двух сессий
 	createSessionReq1 := &pb.CreateSessionRequest{Nickname: "user1"}

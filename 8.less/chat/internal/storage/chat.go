@@ -19,6 +19,7 @@ type Storage interface {
 	AddMessage(ctx context.Context, message *models.Message) error
 	GetChatHistory(ctx context.Context, chatID string) ([]*models.Message, error)
 	GetAndIncrementAnonCount(ctx context.Context, chatID string) (int, error)
+	SaveAnonNickname(ctx context.Context, chatID, sessionID, nickname string) error
 
 	RequestChatAccess(ctx context.Context, chatID, sessionID string) error
 	GetAccessRequests(ctx context.Context, chatID string) ([]string, error)

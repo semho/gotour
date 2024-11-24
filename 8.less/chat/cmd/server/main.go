@@ -6,6 +6,7 @@ import (
 	"chat/pkg/logger"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"chat/internal/api/grpc"
@@ -13,7 +14,6 @@ import (
 	"chat/internal/config"
 	"chat/internal/service"
 	"chat/internal/storage/memory"
-	// TODO: import redis and postgres storage when implemented
 )
 
 func main() {
@@ -41,19 +41,24 @@ func main() {
 			os.Exit(1)
 		}
 
-		if closer, ok := storage.(interface{ Close() error }); ok {
-			defer func() {
-				if err := closer.Close(); err != nil {
-					logger.Log.Error("Failed to close storage connection", "error", err)
-				}
-			}()
-		}
 	default:
 		logger.Log.Error("Unknown storage type", "type", cfg.StorageType)
 		os.Exit(1)
 	}
 
-	chatService := service.NewChatService(storage)
+	if closer, ok := storage.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				logger.Log.Error("Failed to close storage connection", "error", err)
+			}
+		}()
+	}
+
+	chatService, err := service.NewChatService(storage, strings.Split(cfg.KafkaBrokers, ","), cfg.KafkaTopic)
+	if err != nil {
+		logger.Log.Error("Failed to create chat service", "error", err)
+		os.Exit(1)
+	}
 	grpcServer := grpc.NewServer(chatService, cfg.GRPCPort)
 	httpServer := http.NewServer(cfg.HTTPPort, cfg.GRPCPort)
 
@@ -80,6 +85,9 @@ func main() {
 	logger.Log.Info("Shutting down servers")
 
 	grpcServer.Stop()
+	if err = grpcServer.Close(); err != nil {
+		logger.Log.Error("Failed to close gRPC server", "error", err)
+	}
 	httpServer.Stop()
 	logger.Log.Info("Servers stopped")
 }

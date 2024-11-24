@@ -121,11 +121,13 @@
 
 
 
-### Запуск docker
-```make docker-build```
-затем
-```make docker-run ARGS="--grpc-port=50052"```   
-либо любой другой аргумент из конфига
-### Запуск миграций
-```bash
-   make migrate-up DB_DSN="postgres://username:password@localhost:5432/dbname?sslmode=disable"
+
+
+### Запуск docker-compose 
+Для запуска приложения с kafka и postgres нужно сначало сбилдить командой:   
+```make docker-compose-build```   
+затем поднять контейнеры:    
+```make docker-compose-run```    
+контейнеры поднимутся с настройками по дефолту, затем накатить миграцию:    
+```make migrate-up```     
+Для кафка есть UI, по умолчанию на 8081 порту

@@ -243,3 +243,19 @@ func (s *Storage) IsChatOwner(_ context.Context, chatID, sessionID string) (bool
 
 	return chat.OwnerID == sessionID, nil
 }
+
+func (s *Storage) SaveAnonNickname(_ context.Context, chatID, sessionID, nickname string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, ok := s.sessions[sessionID]
+	if !ok {
+		return customerrors.NewSessionError(sessionID, customerrors.ErrSessionNotFound)
+	}
+
+	if session.AnonNicknames == nil {
+		session.AnonNicknames = make(map[string]string)
+	}
+	session.AnonNicknames[chatID] = nickname
+	return nil
+}

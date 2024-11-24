@@ -5,7 +5,7 @@ services:
       - chat-network
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.app
     ports:
       - "${GRPC_PORT:-50051}:50051"
       - "${HTTP_PORT:-8080}:8080"
@@ -17,8 +17,12 @@ services:
       - MAX_CHAT_SIZE=${MAX_CHAT_SIZE:-1000}
       - MAX_CHATS_COUNT=${MAX_CHATS_COUNT:-1000}
       - DEFAULT_TTL=${DEFAULT_TTL:-24h}
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=chat.messages
     depends_on:
       chat-postgres:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   chat-postgres:
@@ -39,6 +43,82 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  message-worker:
+    container_name: chat-message-worker
+    networks:
+      - chat-network
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=chat.messages
+      - KAFKA_GROUP_ID=message-worker
+      - DB_DSN=postgres://user:password@chat-postgres:5432/chatdb?sslmode=disable
+    depends_on:
+      chat-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: chat-zookeeper
+    networks:
+      - chat-network
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: echo mntr | nc localhost 2181 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: chat-kafka
+    networks:
+      - chat-network
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: nc -z localhost 9092 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: chat-kafka-ui
+    networks:
+      - chat-network
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: chat-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 volumes:
   postgres_data:
