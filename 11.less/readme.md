@@ -2,7 +2,8 @@
 1. ### Виртуализация.
    https://habr.com/ru/articles/657677/  
    https://otus.ru/journal/virtualizaciya-tipy-principy-raboty-osobennosti/
-2. ### Гипервизор 1-2-3 типа.
+   https://www.youtube.com/watch?v=R02KBiCc72g&list=PLcDkQ2Au8aVM6hSTeiBGTXNMNBwzQyuZG
+3. ### Гипервизор 1-2-3 типа.
    https://habr.com/ru/companies/vps_house/articles/349788/   
    https://market.cnews.ru/articles/2023-07-07_3_tipa_gipervizorov_i_ih_sravnenie   
    https://servermall.ru/blog/kakoy-gipervizor-vybrat/    
