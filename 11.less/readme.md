@@ -13,6 +13,7 @@
 3. ### Docker.
    https://habr.com/ru/companies/ruvds/articles/438796/  
    https://medium.com/webbdev/docker-bbb3de0f02c3
+   https://habr.com/ru/articles/709268/
 4. ### Контейнеризация.
    https://yandex.cloud/ru/docs/glossary/containerization    
    https://habr.com/ru/companies/otus/articles/767884/    
